@@ -1,0 +1,23 @@
+# Секреты
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Данные
+pgdata/
+*.sqlite3
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Локальные настройки Claude Code
+.claude/

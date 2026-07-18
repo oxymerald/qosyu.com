@@ -1,36 +1,111 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from routers import auth, requests, recycler, clustering, analytics, chat, marketplace
-from routers import telegram_bot
-from database import engine
-from models import Base
 import asyncio
+import logging
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="QOSYU Backend")
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from auth import get_password_hash
+from config import settings
+from database import async_session_maker, engine
+from models import Base, User, UserRole
+from routers import (
+    analytics,
+    auth,
+    chat,
+    clustering,
+    marketplace,
+    push,
+    recycler,
+    requests,
+    reviews,
+    telegram_bot,
+)
+from security import (
+    BodySizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+    rate_limiter,
 )
 
-# --- Инициализация БД ---
-@app.on_event("startup")
-async def init_db():
+logger = logging.getLogger("qosyu")
+logging.basicConfig(level=logging.INFO)
+
+
+async def _bootstrap_admin():
+    """Создаёт администратора из ADMIN_EMAIL/ADMIN_PASSWORD, если его ещё нет."""
+    if not settings.ADMIN_EMAIL or not settings.ADMIN_PASSWORD:
+        return
+    async with async_session_maker() as db:
+        result = await db.execute(select(User).where(User.email == settings.ADMIN_EMAIL.lower()))
+        if result.scalar_one_or_none() is None:
+            db.add(
+                User(
+                    email=settings.ADMIN_EMAIL.lower(),
+                    hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                    company_name="QOSYU Admin",
+                    role=UserRole.ADMIN,
+                )
+            )
+            await db.commit()
+            logger.info("Создан администратор %s", settings.ADMIN_EMAIL)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await rate_limiter.init()
+    await _bootstrap_admin()
 
-# --- Статика ---
-app.mount("/static", StaticFiles(directory="static"), name="static")
+    bot_task = None
+    if settings.TELEGRAM_BOT_TOKEN:
+        bot_task = asyncio.create_task(telegram_bot.run_bot())
+    else:
+        logger.info("TELEGRAM_BOT_TOKEN не задан — бот не запускается")
 
-@app.get("/")
-async def serve_frontend():
-    return FileResponse("static/index.html")
+    yield
+
+    if bot_task:
+        bot_task.cancel()
+    await rate_limiter.close()
+    await engine.dispose()
+
+
+app = FastAPI(
+    title="QOSYU API",
+    description="Цифровая платформа первой мили экологической логистики",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None,
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
+
+# --- Middleware (порядок: снаружи внутрь) ---
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
+if settings.trusted_hosts != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
+if settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Не раскрываем стектрейсы и внутренности наружу
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера"})
+
 
 # --- Роутеры API ---
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -40,28 +115,19 @@ app.include_router(clustering.router, prefix="/clustering", tags=["clustering"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(chat.router)
 app.include_router(marketplace.router)
+app.include_router(reviews.router)
+app.include_router(push.router)
 
-# --- Запуск Telegram-бота (через asyncio.create_task) ---
-async def run_bot():
-    """Асинхронный запуск бота в главном event loop"""
-    try:
-        print("🚀 Запуск Telegram-бота...")
-        bot_app = telegram_bot.setup_bot()
-        
-        # Инициализация и запуск бота
-        await bot_app.initialize()
-        await bot_app.start()
-        await bot_app.updater.start_polling()
-        
-        print("✅ Telegram-бот запущен и слушает сообщения!")
-        
-        # Держим бота активным
-        while True:
-            await asyncio.sleep(60)
-    except Exception as e:
-        print(f"❌ Ошибка в работе Telegram-бота: {e}")
 
-@app.on_event("startup")
-async def startup_telegram_bot():
-    # Запускаем бота в фоновой задаче (не блокируя FastAPI)
-    asyncio.create_task(run_bot())
+@app.get("/health", tags=["service"])
+async def health():
+    return {"status": "ok"}
+
+
+# --- Статика и фронтенд ---
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    return FileResponse("static/index.html")

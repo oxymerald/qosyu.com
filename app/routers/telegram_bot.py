@@ -1,541 +1,383 @@
+"""Telegram-бот QOSYU.
+
+Принципы безопасности:
+- токен берётся ТОЛЬКО из переменной окружения TELEGRAM_BOT_TOKEN;
+- никакие пароли в переписке не запрашиваются и не хранятся:
+  аккаунт привязывается к telegram_chat_id;
+- бот работает с БД напрямую, без HTTP-запросов к собственному API.
+"""
+
 import asyncio
+import logging
+import secrets
+
 import httpx
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, ConversationHandler, MessageHandler, filters
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    Update,
+)
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
+
+from auth import get_password_hash
+from config import settings
 from database import async_session_maker
-from models import User, WasteRequest, RequestStatus, WasteType
-from schemas import WasteRequestCreate
-from auth import get_password_hash, create_access_token
-from sqlalchemy import select, func
-import os
+from models import RequestStatus, User, UserRole, WasteRequest, WasteType
+from services.esg import calculate_co2_saved
 
-# --- Конфигурация ---
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8682827104:AAEIWbKlGlhq53A7kPwX2ZRjDXLAdggfZR0")
+logger = logging.getLogger("qosyu.bot")
 
-# --- Состояния для диалога создания заявки ---
-WASTE_TYPE, WEIGHT, LOCATION = range(3)
+# Состояния диалогов
+REG_COMPANY = 0
+REQ_TYPE, REQ_WEIGHT, REQ_LOCATION = range(1, 4)
 
-# --- Клавиатуры ---
-def get_main_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("📝 Создать заявку", callback_data="create")],
-        [InlineKeyboardButton("📋 Мои заявки", callback_data="my")],
-        [InlineKeyboardButton("🌱 ESG-отчёт", callback_data="esg")],
+WASTE_LABELS = {
+    "plastic": "♻️ Пластик",
+    "cardboard": "📦 Картон",
+    "glass": "🍾 Стекло",
+    "metal": "🔩 Металл",
+}
+
+STATUS_LABELS = {
+    "pending": "⏳ ожидает",
+    "clustered": "🧩 в зоне сбора",
+    "assigned": "🚚 назначен вывоз",
+    "collected": "✅ вывезено",
+    "verified": "✔️ подтверждено",
+}
+
+
+def main_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📝 Создать заявку", callback_data="create")],
+            [InlineKeyboardButton("📋 Мои заявки", callback_data="my")],
+            [InlineKeyboardButton("🌱 ESG-отчёт", callback_data="esg")],
+        ]
+    )
+
+
+def waste_type_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(label, callback_data=value)]
+        for value, label in WASTE_LABELS.items()
     ]
-    return InlineKeyboardMarkup(keyboard)
+    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel")])
+    return InlineKeyboardMarkup(rows)
 
-def get_waste_type_keyboard():
-    keyboard = [
-        [InlineKeyboardButton("♻️ Пластик", callback_data="plastic")],
-        [InlineKeyboardButton("📦 Картон", callback_data="cardboard")],
-        [InlineKeyboardButton("🍾 Стекло", callback_data="glass")],
-        [InlineKeyboardButton("🔩 Металл", callback_data="metal")],
-        [InlineKeyboardButton("❌ Отмена", callback_data="cancel")],
-    ]
-    return InlineKeyboardMarkup(keyboard)
 
-# --- Функции для работы с API ---
-async def api_call(endpoint: str, method: str = "GET", body: dict = None, token: str = None):
-    headers = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    
-    url = f"{API_BASE}{endpoint}"
-    async with httpx.AsyncClient() as client:
-        if method == "GET":
-            resp = await client.get(url, headers=headers)
-        elif method == "POST":
-            resp = await client.post(url, json=body, headers=headers)
-        else:
-            return None
-    if resp.status_code == 200:
-        return resp.json()
-    return None
+async def get_bot_user(chat_id: int) -> User | None:
+    async with async_session_maker() as db:
+        result = await db.execute(select(User).where(User.telegram_chat_id == chat_id))
+        return result.scalar_one_or_none()
 
-async def register_user(email: str, password: str, company_name: str, role: str):
-    """Регистрация пользователя через API"""
-    data = {
-        "email": email,
-        "password": password,
-        "company_name": company_name,
-        "role": role
-    }
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API_BASE}/auth/register", json=data)
-        if resp.status_code == 200:
-            return resp.json()
-    return None
 
-async def login_user(email: str, password: str):
-    """Логин через API"""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API_BASE}/auth/login?email={email}&password={password}")
-        if resp.status_code == 200:
-            return resp.json()
-    return None
+# ---------- /start и регистрация ----------
 
-async def create_request(token: str, waste_type: str, weight_kg: float, latitude: float, longitude: float):
-    """Создание заявки через API"""
-    data = {
-        "waste_type": waste_type,
-        "weight_kg": weight_kg,
-        "latitude": latitude,
-        "longitude": longitude
-    }
-    return await api_call("/requests/create", "POST", data, token)
-
-async def get_my_requests(token: str):
-    """Получить свои заявки"""
-    return await api_call("/requests/my", "GET", token=token)
-
-async def get_esg(token: str):
-    """Получить ESG-отчёт"""
-    return await api_call("/analytics/esg/sme", "GET", token=token)
-
-# --- Хендлеры команд ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка команды /start"""
-    user = update.effective_user
-    welcome_text = (
-        f"👋 Привет, {user.first_name}!\n\n"
-        "🤖 Я бот QOSYU — AI-агрегатор сбора отходов.\n\n"
-        "📌 Что я умею:\n"
-        "• 📝 Создавать заявки на вывоз отходов\n"
-        "• 📋 Показывать список ваших заявок\n"
-        "• 🌱 Показывать ESG-отчёт\n"
-        "• 🔔 Уведомлять об изменениях статуса заявок\n\n"
-        "❗️ Сначала зарегистрируйтесь или войдите.\n"
-        "Используйте /register для регистрации.\n"
-        "Используйте /login для входа."
-    )
-    await update.message.reply_text(welcome_text, reply_markup=get_main_keyboard())
-
-# --- Регистрация через бота ---
-async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало регистрации"""
-    context.user_data["register_step"] = "email"
-    await update.message.reply_text(
-        "📝 Регистрация нового пользователя\n\n"
-        "Введите ваш email:"
-    )
-    return 1
-
-async def register_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение email"""
-    context.user_data["email"] = update.message.text.strip()
-    context.user_data["register_step"] = "company"
-    await update.message.reply_text(
-        f"✅ Email: {context.user_data['email']}\n\n"
-        "Введите название вашей компании:"
-    )
-    return 1
-
-async def register_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение названия компании"""
-    context.user_data["company_name"] = update.message.text.strip()
-    context.user_data["register_step"] = "password"
-    await update.message.reply_text(
-        f"✅ Компания: {context.user_data['company_name']}\n\n"
-        "Введите пароль (минимум 6 символов):"
-    )
-    return 1
-
-async def register_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение пароля и завершение регистрации"""
-    password = update.message.text.strip()
-    if len(password) < 6:
-        await update.message.reply_text("❌ Пароль должен быть не менее 6 символов. Попробуйте снова:")
-        return 1
-    
-    email = context.user_data["email"]
-    company = context.user_data["company_name"]
-    role = "sme"  # по умолчанию SME
-    
-    # Регистрация через API
-    result = await register_user(email, password, company, role)
-    
-    if result:
-        context.user_data["user_id"] = result["id"]
+    user = await get_bot_user(update.effective_chat.id)
+    if user:
         await update.message.reply_text(
-            f"✅ Регистрация успешна!\n\n"
-            f"👤 Пользователь: {email}\n"
-            f"🏢 Компания: {company}\n"
-            f"📌 Роль: {role}\n\n"
-            "Теперь выполните /login для входа."
-        )
-    else:
-        await update.message.reply_text(
-            "❌ Ошибка регистрации. Возможно, такой email уже существует.\n"
-            "Попробуйте другой email."
-        )
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# --- Логин через бота ---
-async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало логина"""
-    context.user_data["login_step"] = "email"
-    await update.message.reply_text(
-        "🔐 Вход в систему\n\n"
-        "Введите ваш email:"
-    )
-    return 1
-
-async def login_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение email для логина"""
-    context.user_data["login_email"] = update.message.text.strip()
-    context.user_data["login_step"] = "password"
-    await update.message.reply_text(
-        f"✅ Email: {context.user_data['login_email']}\n\n"
-        "Введите пароль:"
-    )
-    return 1
-
-async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение пароля и выполнение логина"""
-    password = update.message.text.strip()
-    email = context.user_data["login_email"]
-    
-    result = await login_user(email, password)
-    
-    if result and "access_token" in result:
-        context.user_data["token"] = result["access_token"]
-        await update.message.reply_text(
-            f"✅ Вход успешен!\n\n"
-            f"👤 Добро пожаловать, {email}!\n"
-            "Теперь вы можете создавать заявки и управлять ими.",
-            reply_markup=get_main_keyboard()
-        )
-    else:
-        await update.message.reply_text(
-            "❌ Ошибка входа. Проверьте email и пароль."
-        )
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# --- Создание заявки (через кнопки) ---
-async def create_request_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало создания заявки"""
-    query = update.callback_query
-    await query.answer()
-    
-    if "token" not in context.user_data:
-        await query.edit_message_text(
-            "❌ Вы не авторизованы.\n"
-            "Используйте /login для входа."
-        )
-        return
-    
-    await query.edit_message_text(
-        "📝 Создание заявки на вывоз отходов\n\n"
-        "Выберите тип отходов:",
-        reply_markup=get_waste_type_keyboard()
-    )
-    return WASTE_TYPE
-
-async def select_waste_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Выбор типа отходов"""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "cancel":
-        await query.edit_message_text(
-            "❌ Создание заявки отменено.",
-            reply_markup=get_main_keyboard()
+            f"👋 С возвращением, {user.company_name}!\n\n"
+            "QOSYU — цифровая первая миля переработки.\n"
+            "Создавайте заявки на вывоз вторсырья за 20 секунд.",
+            reply_markup=main_keyboard(),
         )
         return ConversationHandler.END
-    
+    await update.message.reply_text(
+        "👋 Здравствуйте! Это бот QOSYU — цифровой платформы первой мили "
+        "экологической логистики.\n\n"
+        "Мы объединяем небольшие партии вторсырья от бизнеса в выгодные "
+        "маршруты для переработчиков.\n\n"
+        "Как называется ваша компания (кафе, магазин, офис)?"
+    )
+    return REG_COMPANY
+
+
+async def register_company(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    company = " ".join(update.message.text.split())[:120]
+    if len(company) < 2:
+        await update.message.reply_text("Название слишком короткое, попробуйте ещё раз:")
+        return REG_COMPANY
+    chat_id = update.effective_chat.id
+    async with async_session_maker() as db:
+        result = await db.execute(select(User).where(User.telegram_chat_id == chat_id))
+        if result.scalar_one_or_none() is None:
+            # Синтетический email и случайный пароль: вход только через Telegram
+            db.add(
+                User(
+                    email=f"tg-{chat_id}@telegram.qosyu.kz",
+                    hashed_password=get_password_hash(secrets.token_urlsafe(24)),
+                    company_name=company,
+                    role=UserRole.SME,
+                    telegram_chat_id=chat_id,
+                )
+            )
+            await db.commit()
+    await update.message.reply_text(
+        f"✅ Готово! Компания «{company}» зарегистрирована.\n\n"
+        "Теперь вы можете создавать заявки на вывоз вторсырья.",
+        reply_markup=main_keyboard(),
+    )
+    return ConversationHandler.END
+
+
+# ---------- Создание заявки ----------
+
+async def create_request_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user = await get_bot_user(update.effective_chat.id)
+    if not user:
+        await query.edit_message_text("Сначала зарегистрируйтесь: отправьте /start")
+        return ConversationHandler.END
+    await query.edit_message_text(
+        "📝 Новая заявка на вывоз.\n\nВыберите тип вторсырья:",
+        reply_markup=waste_type_keyboard(),
+    )
+    return REQ_TYPE
+
+
+async def select_waste_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "cancel":
+        await query.edit_message_text("Создание заявки отменено.", reply_markup=main_keyboard())
+        return ConversationHandler.END
     context.user_data["waste_type"] = query.data
     await query.edit_message_text(
-        f"✅ Тип: {query.data}\n\n"
-        "Введите вес отходов в килограммах:"
+        f"Тип: {WASTE_LABELS.get(query.data, query.data)}\n\n"
+        "Введите вес в килограммах (например: 15):"
     )
-    return WEIGHT
+    return REQ_WEIGHT
+
 
 async def enter_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод веса"""
     try:
-        weight = float(update.message.text.strip())
-        if weight <= 0:
+        weight = float(update.message.text.strip().replace(",", "."))
+        if not (0 < weight <= 50_000):
             raise ValueError
-        context.user_data["weight"] = weight
-        await update.message.reply_text(
-            f"✅ Вес: {weight} кг\n\n"
-            "Введите координаты (широта, долгота) через пробел\n"
-            "Например: 43.2567 76.9286"
-        )
-        return LOCATION
     except ValueError:
-        await update.message.reply_text(
-            "❌ Введите корректное число (больше 0). Попробуйте снова:"
-        )
-        return WEIGHT
+        await update.message.reply_text("Введите число от 1 до 50000:")
+        return REQ_WEIGHT
+    context.user_data["weight"] = weight
+    location_kb = ReplyKeyboardMarkup(
+        [[KeyboardButton("📍 Отправить геолокацию", request_location=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+    await update.message.reply_text(
+        f"Вес: {weight} кг\n\n"
+        "Отправьте геолокацию точки сбора кнопкой ниже\n"
+        "или введите координаты текстом: широта долгота\n"
+        "(например: 47.1167 51.8833)",
+        reply_markup=location_kb,
+    )
+    return REQ_LOCATION
+
 
 async def enter_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ввод координат и создание заявки"""
-    try:
-        parts = update.message.text.strip().split()
-        if len(parts) != 2:
-            raise ValueError
-        latitude = float(parts[0])
-        longitude = float(parts[1])
-        
-        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
-            raise ValueError
-        
-        # Создание заявки через API
-        token = context.user_data.get("token")
-        waste_type = context.user_data.get("waste_type")
-        weight = context.user_data.get("weight")
-        
-        result = await create_request(token, waste_type, weight, latitude, longitude)
-        
-        if result:
+    if update.message.location:
+        latitude = update.message.location.latitude
+        longitude = update.message.location.longitude
+    else:
+        try:
+            parts = update.message.text.strip().split()
+            latitude, longitude = float(parts[0]), float(parts[1])
+            if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                raise ValueError
+        except (ValueError, IndexError):
             await update.message.reply_text(
-                f"✅ Заявка успешно создана!\n\n"
-                f"📋 ID: {result['id']}\n"
-                f"♻️ Тип: {result['waste_type']}\n"
-                f"📦 Вес: {result['weight_kg']} кг\n"
-                f"📍 Координаты: {latitude}, {longitude}\n"
-                f"📌 Статус: {result['status']}",
-                reply_markup=get_main_keyboard()
+                "Неверный формат. Отправьте геолокацию или два числа через пробел:"
             )
-        else:
-            await update.message.reply_text(
-                "❌ Ошибка создания заявки. Попробуйте позже."
-            )
-    except (ValueError, IndexError):
-        await update.message.reply_text(
-            "❌ Неверный формат координат.\n"
-            "Введите два числа через пробел, например:\n"
-            "43.2567 76.9286"
+            return REQ_LOCATION
+
+    user = await get_bot_user(update.effective_chat.id)
+    if not user:
+        await update.message.reply_text("Сначала зарегистрируйтесь: /start")
+        return ConversationHandler.END
+
+    waste_type = context.user_data.get("waste_type", "cardboard")
+    weight = context.user_data.get("weight", 1.0)
+    async with async_session_maker() as db:
+        new_req = WasteRequest(
+            sme_id=user.id,
+            waste_type=WasteType(waste_type),
+            weight_kg=weight,
+            latitude=latitude,
+            longitude=longitude,
+            location_geom=func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326),
+            status=RequestStatus.PENDING,
         )
-        return LOCATION
-    
+        db.add(new_req)
+        await db.commit()
+        await db.refresh(new_req)
+
+    await update.message.reply_text(
+        "✅ Заявка создана!\n\n"
+        f"📋 Номер: #{new_req.id}\n"
+        f"♻️ Тип: {WASTE_LABELS.get(waste_type, waste_type)}\n"
+        f"⚖️ Вес: {weight} кг\n\n"
+        "AI объединит вашу заявку с соседними в общий маршрут — "
+        "мы сообщим дату вывоза.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await update.message.reply_text("Главное меню:", reply_markup=main_keyboard())
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Мои заявки ---
+
+# ---------- Мои заявки и ESG ----------
+
 async def my_requests(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать мои заявки"""
     query = update.callback_query
     await query.answer()
-    
-    if "token" not in context.user_data:
+    user = await get_bot_user(update.effective_chat.id)
+    if not user:
+        await query.edit_message_text("Сначала зарегистрируйтесь: отправьте /start")
+        return
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(WasteRequest)
+            .where(WasteRequest.sme_id == user.id)
+            .order_by(WasteRequest.created_at.desc())
+            .limit(10)
+        )
+        reqs = result.scalars().all()
+    if not reqs:
         await query.edit_message_text(
-            "❌ Вы не авторизованы.\nИспользуйте /login для входа.",
-            reply_markup=get_main_keyboard()
+            "У вас пока нет заявок. Создайте первую!", reply_markup=main_keyboard()
         )
         return
-    
-    result = await get_my_requests(context.user_data["token"])
-    
-    if result:
-        if not result:
-            await query.edit_message_text(
-                "📋 У вас пока нет заявок.\n\n"
-                "Создайте первую заявку через кнопку 'Создать заявку'.",
-                reply_markup=get_main_keyboard()
-            )
-            return
-        
-        text = "📋 Ваши заявки:\n\n"
-        for req in result[-10:]:  # последние 10
-            status_emoji = "✅" if req["status"] == "collected" else "⏳"
-            text += f"{status_emoji} #{req['id']} {req['waste_type']} — {req['weight_kg']} кг ({req['status']})\n"
-        await query.edit_message_text(text, reply_markup=get_main_keyboard())
-    else:
-        await query.edit_message_text(
-            "❌ Ошибка загрузки заявок.",
-            reply_markup=get_main_keyboard()
-        )
+    lines = ["📋 Ваши последние заявки:\n"]
+    for r in reqs:
+        status = STATUS_LABELS.get(r.status.value, r.status.value)
+        label = WASTE_LABELS.get(r.waste_type.value, r.waste_type.value)
+        lines.append(f"#{r.id} · {label} · {r.weight_kg} кг · {status}")
+    await query.edit_message_text("\n".join(lines), reply_markup=main_keyboard())
 
-# --- ESG-отчёт ---
+
 async def esg_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать ESG-отчёт"""
     query = update.callback_query
     await query.answer()
-    
-    if "token" not in context.user_data:
-        await query.edit_message_text(
-            "❌ Вы не авторизованы.\nИспользуйте /login для входа.",
-            reply_markup=get_main_keyboard()
-        )
+    user = await get_bot_user(update.effective_chat.id)
+    if not user:
+        await query.edit_message_text("Сначала зарегистрируйтесь: отправьте /start")
         return
-    
-    result = await get_esg(context.user_data["token"])
-    
-    if result:
-        text = (
-            "🌱 <b>Ваш ESG-отчёт</b>\n\n"
-            f"♻️ Собрано отходов: <b>{result['total_recycled_kg']} кг</b>\n"
-            f"🌍 CO₂ сэкономлено: <b>{result['co2_saved_kg']} кг</b>\n"
-            f"🌳 Эквивалент деревьев: <b>{result['equivalent_trees']}</b>\n"
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(func.coalesce(func.sum(WasteRequest.weight_kg), 0.0)).where(
+                WasteRequest.sme_id == user.id,
+                WasteRequest.status.in_([RequestStatus.COLLECTED, RequestStatus.VERIFIED]),
+            )
         )
-        await query.edit_message_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=get_main_keyboard()
-        )
-    else:
-        await query.edit_message_text(
-            "❌ Ошибка загрузки ESG-отчёта.",
-            reply_markup=get_main_keyboard()
-        )
-
-# --- Обработка отмены ---
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена диалога"""
-    await update.message.reply_text(
-        "❌ Действие отменено.",
-        reply_markup=get_main_keyboard()
+        total = float(result.scalar() or 0.0)
+    co2 = calculate_co2_saved(total)
+    await query.edit_message_text(
+        "🌱 Ваш ESG-отчёт\n\n"
+        f"♻️ Передано на переработку: {round(total, 1)} кг\n"
+        f"🌍 CO₂ сэкономлено: {round(co2, 1)} кг\n"
+        f"🌳 Эквивалент деревьев: {round(co2 / 22.0, 1)}\n\n"
+        "Полная отчётность доступна в личном кабинете на сайте.",
+        reply_markup=main_keyboard(),
     )
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    await update.message.reply_text("Действие отменено.", reply_markup=main_keyboard())
     return ConversationHandler.END
 
-# --- Кнопка "Назад" (по callback) ---
-async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Возврат в главное меню"""
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(
-        "📌 Главное меню",
-        reply_markup=get_main_keyboard()
-    )
 
-# --- Обработка неизвестных команд ---
-async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "❌ Неизвестная команда.\n"
-        "Используйте /help для списка команд."
-    )
-
-# --- Help ---
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "🤖 <b>QOSYU Bot — помощь</b>\n\n"
-        "📌 <b>Доступные команды:</b>\n"
-        "/start — Начать работу\n"
-        "/register — Зарегистрироваться\n"
-        "/login — Войти в систему\n"
-        "/help — Эта справка\n\n"
-        "📌 <b>Что я умею:</b>\n"
-        "• Создавать заявки на вывоз отходов\n"
-        "• Показывать список ваших заявок\n"
-        "• Показывать ESG-отчёт\n\n"
-        "Связь: @ваш_канал"
+    await update.message.reply_text(
+        "🤖 QOSYU Bot\n\n"
+        "/start — регистрация и главное меню\n"
+        "/help — эта справка\n"
+        "/cancel — отменить текущее действие\n\n"
+        "Заявка на вывоз вторсырья создаётся за 20 секунд:\n"
+        "тип → вес → геолокация. Остальное сделает платформа."
     )
-    await update.message.reply_text(help_text, parse_mode="HTML")
 
-# --- Обработка callback-запросов ---
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Общая обработка callback-запросов"""
-    query = update.callback_query
-    await query.answer()
-    
-    if query.data == "main_menu":
-        await query.edit_message_text(
-            "📌 Главное меню",
-            reply_markup=get_main_keyboard()
-        )
-        return
-    
-    if query.data == "create":
-        # Запускаем диалог создания заявки
-        if "token" not in context.user_data:
-            await query.edit_message_text(
-                "❌ Вы не авторизованы.\nИспользуйте /login для входа."
-            )
-            return
-        
-        await query.edit_message_text(
-            "📝 Создание заявки на вывоз отходов\n\n"
-            "Выберите тип отходов:",
-            reply_markup=get_waste_type_keyboard()
-        )
-        return WASTE_TYPE
-    
-    if query.data == "my":
-        await my_requests(update, context)
-        return
-    
-    if query.data == "esg":
-        await esg_report(update, context)
-        return
-    
-    if query.data in ["plastic", "cardboard", "glass", "metal", "organic"]:
-        # Выбор типа отходов для создания заявки
-        context.user_data["waste_type"] = query.data
-        await query.edit_message_text(
-            f"✅ Тип: {query.data}\n\n"
-            "Введите вес отходов в килограммах (число):"
-        )
-        return WEIGHT
 
-def setup_bot():
-    """Создание и настройка бота"""
-    # Создаём приложение с отключённой обработкой сигналов
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # ОТКЛЮЧАЕМ ОБРАБОТКУ СИГНАЛОВ (для работы в фоновом потоке)
-    # Это ключевое исправление!
-    application._check_signals = False
-    
-    # Регистрация ConversationHandler для создания заявки
-    conv_handler = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(create_request_start, pattern="^create$"),
-        ],
-        states={
-            WASTE_TYPE: [CallbackQueryHandler(select_waste_type, pattern="^(plastic|cardboard|glass|metal|organic|cancel)$")],
-            WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_weight)],
-            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_location)],
-        },
+def setup_bot() -> Application:
+    application = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+
+    registration = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={REG_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, register_company)]},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-    
-    # Регистрация ConversationHandler для регистрации
-    register_conv = ConversationHandler(
-        entry_points=[CommandHandler("register", register)],
+    request_creation = ConversationHandler(
+        entry_points=[CallbackQueryHandler(create_request_start, pattern="^create$")],
         states={
-            1: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_email),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_company),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, register_password),
+            REQ_TYPE: [
+                CallbackQueryHandler(
+                    select_waste_type, pattern="^(plastic|cardboard|glass|metal|cancel)$"
+                )
+            ],
+            REQ_WEIGHT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_weight)],
+            REQ_LOCATION: [
+                MessageHandler(
+                    (filters.TEXT & ~filters.COMMAND) | filters.LOCATION, enter_location
+                )
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
-    
-    # Регистрация ConversationHandler для логина
-    login_conv = ConversationHandler(
-        entry_points=[CommandHandler("login", login)],
-        states={
-            1: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, login_email),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, login_password),
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-    
-    # Добавление обработчиков
-    application.add_handler(CommandHandler("start", start))
+
+    application.add_handler(registration)
+    application.add_handler(request_creation)
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(register_conv)
-    application.add_handler(login_conv)
-    application.add_handler(conv_handler)
-    application.add_handler(CallbackQueryHandler(handle_callback, pattern="^(plastic|cardboard|glass|metal|organic|cancel|main_menu|create|my|esg)$"))
-    application.add_handler(MessageHandler(filters.COMMAND, unknown))
-    
+    application.add_handler(CallbackQueryHandler(my_requests, pattern="^my$"))
+    application.add_handler(CallbackQueryHandler(esg_report, pattern="^esg$"))
     return application
 
-# --- Функция для отправки уведомлений ---
+
+async def run_bot():
+    """Запускается фоновой задачей из lifespan FastAPI."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        application = setup_bot()
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
+        logger.info("Telegram-бот запущен")
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Останавливаю Telegram-бота...")
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
+            raise
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Ошибка Telegram-бота (бот отключён, API продолжает работать)")
+
+
 async def send_notification(chat_id: int, text: str):
-    """Отправить уведомление пользователю"""
-    bot_token = BOT_TOKEN
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    async with httpx.AsyncClient() as client:
-        await client.post(url, json=payload)
+    """Служебная отправка уведомления пользователю."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        return
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(url, json={"chat_id": chat_id, "text": text})
+    except httpx.HTTPError:
+        logger.warning("Не удалось отправить Telegram-уведомление chat_id=%s", chat_id)
