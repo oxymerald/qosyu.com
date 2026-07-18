@@ -6,8 +6,7 @@
   <meta name="description" content="QOSYU — цифровая платформа первой мили экологической логистики. Превращаем разрозненные отходы малого бизнеса в управляемый поток вторсырья." />
   <title>QOSYU — цифровая первая миля переработки в Казахстане</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23990011'/%3E%3Ctext x='50' y='68' font-size='52' font-family='Georgia' fill='%23FCF6F5' text-anchor='middle'%3EQ%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="preconnect" href="https://unpkg.com" />
   <link rel="stylesheet" href="/static/css/app.css" />
 </head>
 <body>
@@ -17,448 +16,314 @@
     <div class="header-inner">
       <a class="brand" href="#top" id="brandLink">
         <span class="brand-mark">Q</span>
-        <span class="brand-text">QOSYU<small>первая миля переработки</small></span>
+        <span class="brand-text">QOSYU<small data-i18n="brand.tagline">первая миля переработки</small></span>
       </a>
+      <button class="nav-toggle" id="navToggle" aria-label="Меню" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
       <nav class="main-nav" id="mainNav">
-        <a href="#problem">Проблема</a>
-        <a href="#solution">Решение</a>
-        <a href="#how">Как работает</a>
-        <a href="#pricing">Тарифы</a>
-        <a href="#team">Команда</a>
+        <a href="#problem" data-i18n="nav.problem">Проблема</a>
+        <a href="#solution" data-i18n="nav.solution">Решение</a>
+        <a href="#how" data-i18n="nav.how">Как работает</a>
+        <a href="#pricing" data-i18n="nav.pricing">Тарифы</a>
+        <a href="#team" data-i18n="nav.team">Команда</a>
       </nav>
-      <div class="header-actions" id="headerActions"><!-- js --></div>
+      <div class="header-right">
+        <div class="lang-switch" id="langSwitch">
+          <button data-lang="ru">RU</button>
+          <button data-lang="en">EN</button>
+          <button data-lang="kk">KK</button>
+        </div>
+        <div class="header-actions" id="headerActions"><!-- js --></div>
+      </div>
     </div>
   </header>
 
   <!-- ======================= ЛЕНДИНГ ======================= -->
   <main id="landingPage">
 
-    <!-- Hook: сначала проблема, потом бренд -->
     <section class="hero" id="top">
       <div class="hero-inner">
-        <p class="hero-eyebrow">Экологическая логистика · Атырау, Казахстан</p>
-        <h1 class="hero-title">Каждый день сотни кафе, магазинов и&nbsp;офисов выбрасывают по&nbsp;10–20&nbsp;кг картона и&nbsp;пластика.</h1>
-        <p class="hero-sub">Для переработчиков такие объёмы нерентабельны — поэтому вторсырьё оказывается на&nbsp;полигоне вместо переработки.</p>
+        <p class="hero-eyebrow" data-i18n="hero.eyebrow">Экологическая логистика · Атырау, Казахстан</p>
+        <h1 class="hero-title" data-i18n="hero.title">Каждый день сотни кафе, магазинов и офисов выбрасывают по 10–20 кг картона и пластика.</h1>
+        <p class="hero-sub" data-i18n="hero.sub">Для переработчиков такие объёмы нерентабельны — поэтому вторсырьё оказывается на полигоне вместо переработки.</p>
         <div class="hero-divider" aria-hidden="true"></div>
-        <p class="hero-reveal">Мы создали <strong>QOSYU</strong> — цифровую платформу первой мили экологической логистики.</p>
+        <p class="hero-reveal" data-i18n="hero.reveal">Мы создали <strong>QOSYU</strong> — цифровую платформу первой мили экологической логистики.</p>
         <div class="hero-cta">
-          <button class="btn btn-cream" data-action="register">Сдать вторсырьё</button>
-          <a class="btn btn-ghost-cream" href="#solution">Как это работает</a>
+          <button class="btn btn-cream" data-action="register" data-i18n="hero.cta.primary">Сдать вторсырьё</button>
+          <a class="btn btn-ghost-cream" href="#solution" data-i18n="hero.cta.secondary">Как это работает</a>
         </div>
       </div>
 
-      <div class="stats-band">
-        <div class="stat">
-          <span class="stat-num">1,1%</span>
-          <span class="stat-cap">коммунальных отходов реально становится вторсырьём</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num">48,3&nbsp;млн&nbsp;т</span>
-          <span class="stat-cap">отходов уже накоплено на полигонах страны</span>
-        </div>
-        <div class="stat">
-          <span class="stat-num">20,6%</span>
-          <span class="stat-cap">из ~3000 полигонов соответствуют экологическим нормам</span>
-        </div>
+      <div class="stats-band reveal">
+        <div class="stat"><span class="stat-num">1,1%</span><span class="stat-cap" data-i18n="stats.1.cap">коммунальных отходов реально становится вторсырьём</span></div>
+        <div class="stat"><span class="stat-num">48,3&nbsp;млн&nbsp;т</span><span class="stat-cap" data-i18n="stats.2.cap">отходов уже накоплено на полигонах страны</span></div>
+        <div class="stat"><span class="stat-num">20,6%</span><span class="stat-cap" data-i18n="stats.3.cap">из ~3000 полигонов соответствуют экологическим нормам</span></div>
       </div>
-      <p class="stats-sources">Источники: energyprom.kz, kapital.kz</p>
+      <p class="stats-sources" data-i18n="stats.sources">Источники: energyprom.kz, kapital.kz</p>
     </section>
 
-    <!-- Проблема -->
     <section class="section" id="problem">
-      <h2 class="section-title">Три причины, почему вторсырьё малого бизнеса не&nbsp;перерабатывается</h2>
+      <h2 class="section-title" data-i18n="problem.title">Три причины, почему вторсырьё малого бизнеса не перерабатывается</h2>
       <div class="cards-3">
-        <article class="card">
-          <span class="num-circle">1</span>
-          <h3>Разрозненность</h3>
-          <p>Малые партии по 10–20 кг в каждой отдельной точке — кафе, магазине, офисе.</p>
-        </article>
-        <article class="card">
-          <span class="num-circle">2</span>
-          <h3>Логистический тупик</h3>
-          <p>Переработчику невыгодно отправлять машину ради одной точки с парой коробок картона.</p>
-        </article>
-        <article class="card">
-          <span class="num-circle">3</span>
-          <h3>Итог</h3>
-          <p>Ценное сырьё едет на полигон, а углеродный след города продолжает расти.</p>
-        </article>
+        <article class="card reveal"><span class="num-circle">1</span><h3 data-i18n="problem.1.h">Разрозненность</h3><p data-i18n="problem.1.p">Малые партии по 10–20 кг в каждой отдельной точке — кафе, магазине, офисе.</p></article>
+        <article class="card reveal"><span class="num-circle">2</span><h3 data-i18n="problem.2.h">Логистический тупик</h3><p data-i18n="problem.2.p">Переработчику невыгодно отправлять машину ради одной точки с парой коробок картона.</p></article>
+        <article class="card reveal"><span class="num-circle">3</span><h3 data-i18n="problem.3.h">Итог</h3><p data-i18n="problem.3.p">Ценное сырьё едет на полигон, а углеродный след города продолжает расти.</p></article>
       </div>
     </section>
 
-    <!-- First Mile -->
     <section class="section section-blush" id="solution">
-      <h2 class="section-title">Что такое First Mile</h2>
-      <p class="section-sub">Первая миля — этап, где мелкие, разрозненные объёмы вторсырья от&nbsp;бизнеса объединяются в&nbsp;экономически выгодный маршрут для&nbsp;переработчика.</p>
+      <h2 class="section-title" data-i18n="fm.title">Что такое First Mile</h2>
+      <p class="section-sub" data-i18n="fm.sub">Первая миля — этап, где мелкие, разрозненные объёмы вторсырья от бизнеса объединяются в экономически выгодный маршрут для переработчика.</p>
       <div class="flow-diagram">
-        <div class="flow-block">
-          <h4>Бизнес</h4>
-          <p>кафе, магазины, офисы</p>
-        </div>
+        <div class="flow-block reveal"><h4 data-i18n="fm.business.h">Бизнес</h4><p data-i18n="fm.business.p">кафе, магазины, офисы</p></div>
         <div class="flow-arrow" aria-hidden="true">→</div>
-        <div class="flow-block flow-accent">
-          <h4>QOSYU · First Mile</h4>
-          <p>объединяет заявки в маршрут</p>
-        </div>
+        <div class="flow-block flow-accent reveal"><h4 data-i18n="fm.qosyu.h">QOSYU · First Mile</h4><p data-i18n="fm.qosyu.p">объединяет заявки в маршрут</p></div>
         <div class="flow-arrow" aria-hidden="true">→</div>
-        <div class="flow-block">
-          <h4>Переработчик</h4>
-          <p>забирает готовый объём</p>
-        </div>
+        <div class="flow-block reveal"><h4 data-i18n="fm.recycler.h">Переработчик</h4><p data-i18n="fm.recycler.p">забирает готовый объём</p></div>
       </div>
     </section>
 
-    <!-- Почему сейчас -->
     <section class="section">
-      <h2 class="section-title">Почему сейчас</h2>
+      <h2 class="section-title" data-i18n="now.title">Почему сейчас</h2>
       <div class="cards-4">
-        <article class="card card-row">
-          <span class="num-circle">1</span>
-          <div><h3>Государственная повестка</h3>
-          <p>Инициатива «Таза Қазақстан» продвигает переработку на уровне страны.</p></div>
-        </article>
-        <article class="card card-row">
-          <span class="num-circle">2</span>
-          <div><h3>Рост требований к ESG</h3>
-          <p>Бизнесу нужна прозрачная экологическая отчётность.</p></div>
-        </article>
-        <article class="card card-row">
-          <span class="num-circle">3</span>
-          <div><h3>Спрос переработчиков</h3>
-          <p>Им нужен стабильный поток вторсырья без затрат на логистику.</p></div>
-        </article>
-        <article class="card card-row">
-          <span class="num-circle">4</span>
-          <div><h3>Дешевеющая цифровизация</h3>
-          <p>AI-маршрутизация и гео-сервисы стали доступны малым командам.</p></div>
-        </article>
+        <article class="card card-row reveal"><span class="num-circle">1</span><div><h3 data-i18n="now.1.h">Государственная повестка</h3><p data-i18n="now.1.p">Инициатива «Таза Қазақстан» продвигает переработку на уровне страны.</p></div></article>
+        <article class="card card-row reveal"><span class="num-circle">2</span><div><h3 data-i18n="now.2.h">Рост требований к ESG</h3><p data-i18n="now.2.p">Бизнесу нужна прозрачная экологическая отчётность.</p></div></article>
+        <article class="card card-row reveal"><span class="num-circle">3</span><div><h3 data-i18n="now.3.h">Спрос переработчиков</h3><p data-i18n="now.3.p">Им нужен стабильный поток вторсырья без затрат на логистику.</p></div></article>
+        <article class="card card-row reveal"><span class="num-circle">4</span><div><h3 data-i18n="now.4.h">Дешевеющая цифровизация</h3><p data-i18n="now.4.p">AI-маршрутизация и гео-сервисы стали доступны малым командам.</p></div></article>
       </div>
     </section>
 
-    <!-- Как AI создаёт ценность -->
     <section class="section section-blush" id="how">
-      <h2 class="section-title">Как AI создаёт ценность</h2>
+      <h2 class="section-title" data-i18n="ai.title">Как AI создаёт ценность</h2>
       <div class="steps-row">
-        <div class="step">
-          <span class="step-circle">1</span>
-          <p><strong>Кафе</strong><br />15 кг картона</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">1</span><p><strong data-i18n="ai.1.h">Кафе</strong><br /><span data-i18n="ai.1.p">15 кг картона</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">2</span>
-          <p><strong>Заявка</strong><br />за 10 секунд</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">2</span><p><strong data-i18n="ai.2.h">Заявка</strong><br /><span data-i18n="ai.2.p">за 10 секунд</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">3</span>
-          <p><strong>AI объединяет</strong><br />25 соседних заявок</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">3</span><p><strong data-i18n="ai.3.h">AI объединяет</strong><br /><span data-i18n="ai.3.p">25 соседних заявок</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">4</span>
-          <p><strong>Маршрут</strong><br />оптимальный по гео</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">4</span><p><strong data-i18n="ai.4.h">Маршрут</strong><br /><span data-i18n="ai.4.p">оптимальный по гео</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle step-green">5</span>
-          <p><strong>Переработчик</strong><br />забирает сразу 450 кг</p>
-        </div>
+        <div class="step reveal"><span class="step-circle step-green">5</span><p><strong data-i18n="ai.5.h">Переработчик</strong><br /><span data-i18n="ai.5.p">забирает сразу 450 кг</span></p></div>
       </div>
-      <blockquote class="quote-block">
-        «Сегодня переработчик не поедет за 15 кг картона в одно кафе. Но если AI объединит
-        25 соседних кафе в один маршрут — получится 400–500 кг вторсырья за один рейс.
-        Именно в этом ценность QOSYU.»
-      </blockquote>
+      <blockquote class="quote-block" data-i18n="ai.quote">«Сегодня переработчик не поедет за 15 кг картона в одно кафе. Но если AI объединит 25 соседних кафе в один маршрут — получится 400–500 кг вторсырья за один рейс. Именно в этом ценность QOSYU.»</blockquote>
     </section>
 
-    <!-- Конкурентный анализ -->
     <section class="section" id="compare">
-      <h2 class="section-title">Почему существующие решения не&nbsp;закрывают эту проблему</h2>
+      <h2 class="section-title" data-i18n="cmp.title">Почему существующие решения не закрывают эту проблему</h2>
       <div class="table-wrap">
         <table class="compare-table">
-          <thead>
-            <tr>
-              <th>Критерий</th>
-              <th>Спецавтобаза</th>
-              <th>TazaQazBot</th>
-              <th class="col-qosyu">QOSYU</th>
-            </tr>
-          </thead>
+          <thead><tr><th data-i18n="cmp.criterion">Критерий</th><th>Спецавтобаза</th><th>TazaQazBot</th><th class="col-qosyu">QOSYU</th></tr></thead>
           <tbody>
-            <tr><td>Основная задача</td><td>Вывоз бытовых отходов по маршруту</td><td>Жалобы на мусор и свалки</td><td class="col-qosyu">Управление потоком вторсырья</td></tr>
-            <tr><td>Целевая аудитория</td><td>Население, организации</td><td>Любой гражданин</td><td class="col-qosyu">Малый и средний бизнес</td></tr>
-            <tr><td>Работа с вторсырьём</td><td>Нет</td><td>Нет</td><td class="col-qosyu">Да</td></tr>
-            <tr><td>Сбор малых объёмов</td><td>Нет</td><td>Нет</td><td class="col-qosyu">Да</td></tr>
-            <tr><td>AI-маршрутизация</td><td>Нет</td><td>Нет</td><td class="col-qosyu">Да</td></tr>
-            <tr><td>ESG-отчётность</td><td>Нет</td><td>Нет</td><td class="col-qosyu">Да</td></tr>
+            <tr><td data-i18n="cmp.r1">Основная задача</td><td>Вывоз бытовых отходов</td><td>Жалобы на свалки</td><td class="col-qosyu">Управление потоком вторсырья</td></tr>
+            <tr><td data-i18n="cmp.r2">Целевая аудитория</td><td>Население</td><td>Любой гражданин</td><td class="col-qosyu">Малый и средний бизнес</td></tr>
+            <tr><td data-i18n="cmp.r3">Работа с вторсырьём</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
+            <tr><td data-i18n="cmp.r4">Сбор малых объёмов</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
+            <tr><td data-i18n="cmp.r5">AI-маршрутизация</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
+            <tr><td data-i18n="cmp.r6">ESG-отчётность</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
           </tbody>
         </table>
       </div>
-      <div class="note-plate">
-        Мы не заменяем коммунальные службы: они работают с бытовыми отходами по утверждённым
-        маршрутам. QOSYU создаёт цифровую платформу для коммерческого вторсырья малого бизнеса,
-        где сегодня нет эффективной координации.
-      </div>
-      <div class="mini-flows">
-        <div class="mini-flow">
-          <span class="mini-flow-label">Бытовой мусор — не наш профиль</span>
-          <div class="mini-flow-track">
-            <span>Дом / магазин</span><i>→</i><span>TazaQazBot (жалоба на свалку)</span><i>→</i><span>Акимат убирает свалку</span>
-          </div>
-        </div>
-        <div class="mini-flow mini-flow-ours">
-          <span class="mini-flow-label">Наш профиль — коммерческое вторсырьё</span>
-          <div class="mini-flow-track">
-            <span>Магазин: 10 кг картона + 15 кг пластика</span><i>→</i><span class="track-accent">QOSYU · AI объединяет заявки</span><i>→</i><span>Переработчик</span>
-          </div>
-        </div>
-      </div>
+      <div class="note-plate" data-i18n="cmp.note">Мы не заменяем коммунальные службы: они работают с бытовыми отходами по утверждённым маршрутам. QOSYU создаёт цифровую платформу для коммерческого вторсырья малого бизнеса, где сегодня нет эффективной координации.</div>
     </section>
 
-    <!-- Customer Journey -->
     <section class="section section-blush">
-      <h2 class="section-title">Customer Journey предпринимателя</h2>
+      <h2 class="section-title" data-i18n="journey.title">Customer Journey предпринимателя</h2>
       <div class="steps-row steps-journey">
-        <div class="step">
-          <span class="step-circle">1</span>
-          <p><strong>Открыл Telegram</strong><br />нашёл бота QOSYU</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">1</span><p><strong data-i18n="journey.1.h">Открыл Telegram</strong><br /><span data-i18n="journey.1.p">нашёл бота QOSYU</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">2</span>
-          <p><strong>Заполнил заявку</strong><br />за 20 секунд: вид и вес сырья</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">2</span><p><strong data-i18n="journey.2.h">Заполнил заявку</strong><br /><span data-i18n="journey.2.p">за 20 секунд</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">3</span>
-          <p><strong>Получил дату вывоза</strong><br />система назначает зону</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">3</span><p><strong data-i18n="journey.3.h">Получил дату вывоза</strong><br /><span data-i18n="journey.3.p">система назначает зону</span></p></div>
         <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step">
-          <span class="step-circle">4</span>
-          <p><strong>Получил ESG-отчёт</strong><br />метрики для отчётности</p>
-        </div>
+        <div class="step reveal"><span class="step-circle">4</span><p><strong data-i18n="journey.4.h">Получил ESG-отчёт</strong><br /><span data-i18n="journey.4.p">метрики для отчётности</span></p></div>
       </div>
-      <div class="note-plate">Никакой сложной логистики со стороны бизнеса — вся оптимизация происходит на&nbsp;стороне платформы.</div>
+      <div class="note-plate" data-i18n="journey.note">Никакой сложной логистики со стороны бизнеса — вся оптимизация происходит на стороне платформы.</div>
     </section>
 
-    <!-- Выгода для каждой стороны -->
     <section class="section">
-      <h2 class="section-title">Выгода для каждой стороны</h2>
+      <h2 class="section-title" data-i18n="benefit.title">Выгода для каждой стороны</h2>
       <div class="benefit-cols">
-        <div class="benefit-col">
-          <h3>Бизнес</h3>
-          <ul class="check-list">
-            <li>Бесплатный или дешёвый вывоз вторсырья</li>
-            <li>Готовая ESG-отчётность без лишних усилий</li>
-            <li>Меньше мусора и расходов на его утилизацию</li>
-          </ul>
-        </div>
-        <div class="benefit-col">
-          <h3>Переработчик</h3>
-          <ul class="check-list">
-            <li>Полная машина вместо полупустых рейсов</li>
-            <li>Экономия топлива и времени в пути</li>
-            <li>Оптимальный, заранее просчитанный маршрут</li>
-          </ul>
-        </div>
+        <div class="benefit-col reveal"><h3 data-i18n="benefit.business">Бизнес</h3><ul class="check-list"><li data-i18n="benefit.b1">Бесплатный или дешёвый вывоз вторсырья</li><li data-i18n="benefit.b2">Готовая ESG-отчётность без лишних усилий</li><li data-i18n="benefit.b3">Меньше мусора и расходов на его утилизацию</li></ul></div>
+        <div class="benefit-col reveal"><h3 data-i18n="benefit.recycler">Переработчик</h3><ul class="check-list"><li data-i18n="benefit.r1">Полная машина вместо полупустых рейсов</li><li data-i18n="benefit.r2">Экономия топлива и времени в пути</li><li data-i18n="benefit.r3">Оптимальный, заранее просчитанный маршрут</li></ul></div>
       </div>
     </section>
 
-    <!-- Тарифы -->
     <section class="section section-blush" id="pricing">
-      <h2 class="section-title">Тарифы</h2>
-      <p class="section-sub">MVP уже работает: сайт, Telegram-бот, карта сбора и заявки — единый поток от&nbsp;заявки до&nbsp;вывоза.</p>
+      <h2 class="section-title" data-i18n="pricing.title">Тарифы</h2>
+      <p class="section-sub" data-i18n="pricing.sub">MVP уже работает: сайт, Telegram-бот, карта сбора и заявки — единый поток от заявки до вывоза.</p>
       <div class="pricing-grid">
-        <article class="price-card">
+        <article class="price-card reveal">
           <h3 class="price-name">Start</h3>
-          <p class="price-value">0&nbsp;₸<span>/мес</span></p>
-          <ul class="check-list">
-            <li>До 5 заявок в месяц</li>
-            <li>Базовая кластеризация</li>
-            <li>ESG-отчёт в PDF</li>
-          </ul>
-          <button class="btn btn-outline" data-action="register">Начать бесплатно</button>
+          <p class="price-value">0&nbsp;₸<span data-i18n="pricing.month">/мес</span></p>
+          <ul class="check-list"><li data-i18n="pricing.start.f1">До 5 заявок в месяц</li><li data-i18n="pricing.start.f2">Базовая кластеризация</li><li data-i18n="pricing.start.f3">ESG-отчёт в PDF</li></ul>
+          <button class="btn btn-outline" data-action="register" data-i18n="pricing.start.cta">Начать бесплатно</button>
         </article>
-        <article class="price-card price-featured">
-          <span class="price-badge">Популярный</span>
+        <article class="price-card price-featured reveal">
+          <span class="price-badge" data-i18n="pricing.popular">Популярный</span>
           <h3 class="price-name">Pro</h3>
-          <p class="price-value">9&nbsp;900&nbsp;₸<span>/мес</span></p>
-          <ul class="check-list">
-            <li>Неограниченные заявки</li>
-            <li>Приоритетная кластеризация</li>
-            <li>API для интеграции</li>
-            <li>Поддержка 24/7</li>
-          </ul>
-          <button class="btn btn-cream" data-action="register">Выбрать Pro</button>
+          <p class="price-value">9&nbsp;900&nbsp;₸<span data-i18n="pricing.month">/мес</span></p>
+          <ul class="check-list"><li data-i18n="pricing.pro.f1">Неограниченные заявки</li><li data-i18n="pricing.pro.f2">Приоритетная кластеризация</li><li data-i18n="pricing.pro.f3">API для интеграции</li><li data-i18n="pricing.pro.f4">Поддержка 24/7</li></ul>
+          <button class="btn btn-cream" data-action="register" data-i18n="pricing.pro.cta">Выбрать Pro</button>
         </article>
-        <article class="price-card">
+        <article class="price-card reveal">
           <h3 class="price-name">Enterprise</h3>
-          <p class="price-value">Индивидуально</p>
-          <ul class="check-list">
-            <li>Индивидуальный SLA</li>
-            <li>Выделенные машины</li>
-            <li>Белая маркировка</li>
-          </ul>
-          <button class="btn btn-outline" data-action="register">Связаться</button>
+          <p class="price-value" data-i18n="pricing.ent.price">Индивидуально</p>
+          <ul class="check-list"><li data-i18n="pricing.ent.f1">Индивидуальный SLA</li><li data-i18n="pricing.ent.f2">Выделенные машины</li><li data-i18n="pricing.ent.f3">Белая маркировка</li></ul>
+          <button class="btn btn-outline" data-action="register" data-i18n="pricing.ent.cta">Связаться</button>
         </article>
       </div>
     </section>
 
-    <!-- Roadmap -->
     <section class="section">
-      <h2 class="section-title">Roadmap 2026</h2>
+      <h2 class="section-title" data-i18n="roadmap.title">Roadmap 2026</h2>
       <div class="roadmap">
-        <div class="roadmap-node"><span class="step-circle">1</span><p>MVP</p></div>
+        <div class="roadmap-node"><span class="step-circle">1</span><p data-i18n="roadmap.1">MVP</p></div>
         <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">2</span><p>50 компаний</p></div>
+        <div class="roadmap-node"><span class="step-circle">2</span><p data-i18n="roadmap.2">50 компаний</p></div>
         <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">3</span><p>Партнёрства</p></div>
+        <div class="roadmap-node"><span class="step-circle">3</span><p data-i18n="roadmap.3">Партнёрства</p></div>
         <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">4</span><p>Атырау</p></div>
+        <div class="roadmap-node"><span class="step-circle">4</span><p data-i18n="roadmap.4">Атырау</p></div>
         <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">5</span><p>Актау</p></div>
+        <div class="roadmap-node"><span class="step-circle">5</span><p data-i18n="roadmap.5">Актау</p></div>
         <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle step-green">6</span><p>Весь Казахстан</p></div>
+        <div class="roadmap-node"><span class="step-circle step-green">6</span><p data-i18n="roadmap.6">Весь Казахстан</p></div>
       </div>
-      <div class="note-plate">От MVP в одном городе — к сети региональных зон сбора: сперва подтверждаем экономику на&nbsp;Атырау, затем масштабируем модель на&nbsp;Актау и&nbsp;другие города Казахстана.</div>
+      <div class="note-plate" data-i18n="roadmap.note">От MVP в одном городе — к сети региональных зон сбора: сперва подтверждаем экономику на Атырау, затем масштабируем модель на Актау и другие города Казахстана.</div>
     </section>
 
-    <!-- Команда -->
     <section class="section section-blush" id="team">
-      <h2 class="section-title">Наша команда</h2>
+      <h2 class="section-title" data-i18n="team.title">Наша команда</h2>
       <div class="team-grid">
-        <article class="team-card">
-          <span class="avatar">АА</span>
-          <h3>Ахметжанов Айсултан</h3>
-          <p>CEO</p>
-        </article>
-        <article class="team-card">
-          <span class="avatar">ГБ</span>
-          <h3>Галымжанулы Бекарыс</h3>
-          <p>CTO</p>
-        </article>
-        <article class="team-card">
-          <span class="avatar">ЖГ</span>
-          <h3>Жарасова Гульжанат</h3>
-          <p>Product Designer</p>
-        </article>
-        <article class="team-card">
-          <span class="avatar">ЮА</span>
-          <h3>Юсупова Асылназ</h3>
-          <p>Business Development</p>
-        </article>
+        <article class="team-card reveal"><span class="avatar">АА</span><h3>Ахметжанов Айсултан</h3><p data-i18n="team.ceo">CEO</p></article>
+        <article class="team-card reveal"><span class="avatar">ГБ</span><h3>Галымжанулы Бекарыс</h3><p data-i18n="team.cto">CTO</p></article>
+        <article class="team-card reveal"><span class="avatar">ЖГ</span><h3>Жарасова Гульжанат</h3><p data-i18n="team.designer">Product Designer</p></article>
+        <article class="team-card reveal"><span class="avatar">ЮА</span><h3>Юсупова Асылназ</h3><p data-i18n="team.bizdev">Business Development</p></article>
       </div>
     </section>
 
-    <!-- Ожидаемый эффект -->
     <section class="section">
-      <h2 class="section-title">Ожидаемый экологический и социальный результат</h2>
+      <h2 class="section-title" data-i18n="effect.title">Ожидаемый экологический и социальный результат</h2>
       <div class="benefit-cols">
-        <div class="benefit-col">
-          <h3>Social</h3>
-          <ul class="check-list">
-            <li>Сокращение пробега грузовиков переработчиков за счёт гео-кластеризации</li>
-            <li>Снижение объёма полезных отходов, отправляемых на городские свалки</li>
-          </ul>
-        </div>
-        <div class="benefit-col">
-          <h3>Environmental</h3>
-          <ul class="check-list">
-            <li>Культура осознанного потребления и авторасчёт эко-метрик для бизнеса</li>
-            <li>Прозрачная ESG-отчётность, повышающая инвестиционную привлекательность</li>
-          </ul>
-        </div>
+        <div class="benefit-col reveal"><h3 data-i18n="effect.social">Social</h3><ul class="check-list"><li data-i18n="effect.s1">Сокращение пробега грузовиков переработчиков за счёт гео-кластеризации</li><li data-i18n="effect.s2">Снижение объёма полезных отходов, отправляемых на городские свалки</li></ul></div>
+        <div class="benefit-col reveal"><h3 data-i18n="effect.env">Environmental</h3><ul class="check-list"><li data-i18n="effect.e1">Культура осознанного потребления и авторасчёт эко-метрик для бизнеса</li><li data-i18n="effect.e2">Прозрачная ESG-отчётность, повышающая инвестиционную привлекательность</li></ul></div>
       </div>
-      <p class="footnote">Оценка сокращения пробега — по результатам моделирования маршрутов на пилотной зоне; будет уточнена после первых реальных выездов.</p>
+      <p class="footnote" data-i18n="effect.note">Оценка сокращения пробега — по результатам моделирования маршрутов на пилотной зоне; будет уточнена после первых реальных выездов.</p>
     </section>
 
-    <!-- Финал -->
     <section class="final-band">
-      <h2>Мы превращаем разрозненные отходы малого бизнеса в&nbsp;управляемый поток вторсырья.</h2>
-      <p class="final-sub"><em>QOSYU — цифровая первая миля переработки в Казахстане.</em></p>
-      <button class="btn btn-cream" data-action="register">Присоединиться к платформе</button>
-      <p class="final-love">with love, QOSYU team</p>
+      <h2 data-i18n="final.title">Мы превращаем разрозненные отходы малого бизнеса в управляемый поток вторсырья.</h2>
+      <p class="final-sub"><em data-i18n="final.sub">QOSYU — цифровая первая миля переработки в Казахстане.</em></p>
+      <button class="btn btn-cream" data-action="register" data-i18n="final.cta">Присоединиться к платформе</button>
+      <p class="final-love" data-i18n="final.love">with love, QOSYU team</p>
     </section>
   </main>
 
   <!-- ======================= ЛИЧНЫЙ КАБИНЕТ ======================= -->
   <main id="cabinetPage" class="hidden">
     <div class="cabinet-tabs" id="cabinetTabs">
-      <button class="tab-btn tab-active" data-tab="map">Карта</button>
-      <button class="tab-btn" data-tab="requests">Мои заявки</button>
-      <button class="tab-btn" data-tab="chat">Чат <span id="chatUnreadBadge" class="badge hidden"></span></button>
-      <button class="tab-btn" data-tab="market">Маркетплейс</button>
+      <button class="tab-btn tab-active" data-tab="map" data-i18n="tab.map">Карта</button>
+      <button class="tab-btn" data-tab="requests" data-i18n="tab.requests">Мои заявки</button>
+      <button class="tab-btn" data-tab="chat">
+        <span data-i18n="tab.chat">Чат</span> <span id="chatUnreadBadge" class="badge hidden"></span>
+      </button>
+      <button class="tab-btn" data-tab="market" data-i18n="tab.market">Маркетплейс</button>
+      <button class="tab-btn hidden" data-tab="assistant" id="tabAssistantBtn" data-i18n="tab.assistant">AI-помощник</button>
+      <button class="tab-btn hidden" data-tab="admin" id="tabAdminBtn" data-i18n="tab.admin">Админ</button>
     </div>
 
-    <!-- Карта -->
     <section class="tab-pane" id="pane-map">
       <aside class="cabinet-side">
         <div id="cabinetUserCard" class="side-card"><!-- js --></div>
         <div id="cabinetActions" class="side-stack"><!-- js --></div>
       </aside>
-      <div class="cabinet-map-wrap"><div id="cabinetMap"></div></div>
+      <div class="cabinet-map-wrap"><div id="cabinetMap"></div><div id="routePanel" class="route-panel hidden"></div></div>
     </section>
 
-    <!-- Заявки -->
     <section class="tab-pane hidden" id="pane-requests">
       <div class="pane-narrow">
-        <h2 class="pane-title">История заявок</h2>
+        <h2 class="pane-title" data-i18n="cab.requestsHistory">История заявок</h2>
         <div id="requestsHistoryList" class="side-stack"></div>
       </div>
     </section>
 
-    <!-- Чат -->
     <section class="tab-pane hidden" id="pane-chat">
       <aside class="cabinet-side">
-        <h2 class="pane-title">Диалоги</h2>
+        <h2 class="pane-title" data-i18n="chat.dialogs">Диалоги</h2>
         <div id="chatPartnersList" class="side-stack"></div>
       </aside>
       <div class="chat-panel">
-        <div class="chat-head" id="chatHead">Выберите собеседника</div>
+        <div class="chat-head" id="chatHead" data-i18n="chat.pick">Выберите собеседника</div>
         <div class="chat-messages" id="chatMessages"></div>
         <form class="chat-input-row hidden" id="chatForm">
-          <input type="text" id="chatInput" maxlength="2000" placeholder="Сообщение…" autocomplete="off" />
-          <button type="submit" class="btn btn-wine">Отправить</button>
+          <input type="text" id="chatInput" maxlength="2000" data-i18n-ph="chat.placeholder" autocomplete="off" />
+          <button type="submit" class="btn btn-wine" data-i18n="chat.send">Отправить</button>
         </form>
       </div>
     </section>
 
-    <!-- Маркетплейс -->
     <section class="tab-pane hidden" id="pane-market">
       <div class="pane-wide">
         <div class="pane-head-row">
-          <h2 class="pane-title">Маркетплейс вторсырья</h2>
-          <button class="btn btn-wine" id="addListingBtn">Добавить объявление</button>
+          <h2 class="pane-title" data-i18n="market.title">Маркетплейс вторсырья</h2>
+          <button class="btn btn-wine" id="addListingBtn" data-i18n="market.add">Добавить объявление</button>
         </div>
         <div id="marketplaceListings" class="market-grid"></div>
-        <h2 class="pane-title" style="margin-top:2rem">Мои заказы</h2>
+        <h2 class="pane-title" style="margin-top:2rem" data-i18n="market.myOrders">Мои заказы</h2>
         <div id="myOrdersList" class="side-stack"></div>
+      </div>
+    </section>
+
+    <section class="tab-pane hidden" id="pane-assistant">
+      <div class="pane-narrow assistant-wrap">
+        <h2 class="pane-title" data-i18n="assistant.title">AI-помощник QOSYU</h2>
+        <p class="assistant-hint" data-i18n="assistant.hint">Спросите про заявки, вывоз, ESG или подготовку вторсырья.</p>
+        <div class="assistant-log" id="assistantLog"></div>
+        <form class="assistant-form" id="assistantForm">
+          <input type="text" id="assistantInput" maxlength="2000" data-i18n-ph="assistant.placeholder" autocomplete="off" />
+          <button type="submit" class="btn btn-wine" data-i18n="assistant.send">Спросить</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="tab-pane hidden" id="pane-admin">
+      <div class="pane-wide">
+        <h2 class="pane-title" data-i18n="admin.title">Панель администратора</h2>
+        <div id="adminStats" class="admin-tiles"></div>
+        <div class="admin-charts">
+          <div class="admin-chart-card"><h3 data-i18n="admin.requests14d">Заявки за 14 дней</h3><div id="adminChartSeries"></div></div>
+          <div class="admin-chart-card"><h3 data-i18n="admin.wasteDist">Распределение по типам</h3><div id="adminChartWaste"></div></div>
+        </div>
+        <div class="admin-chart-card"><h3 data-i18n="admin.aiRecs">AI-рекомендации</h3><ul id="adminInsights" class="check-list"></ul></div>
+        <div class="pane-head-row" style="margin-top:1.5rem">
+          <h3 class="pane-title" data-i18n="admin.userList">Пользователи</h3>
+          <input type="text" id="adminUserSearch" class="field" style="max-width:280px" data-i18n-ph="admin.search" />
+        </div>
+        <div id="adminUsersList" class="side-stack"></div>
       </div>
     </section>
   </main>
 
-  <!-- ======================= ФУТЕР ======================= -->
   <footer class="site-footer" id="mainFooter">
     <div class="footer-links">
-      <a href="#" id="privacyLink">Политика конфиденциальности</a>
-      <a href="#" id="termsLink">Условия использования</a>
+      <a href="#" id="privacyLink" data-i18n="footer.privacy">Политика конфиденциальности</a>
+      <a href="#" id="termsLink" data-i18n="footer.terms">Условия использования</a>
     </div>
-    <p>© 2026 QOSYU — цифровая платформа первой мили экологической логистики Казахстана</p>
+    <p data-i18n="footer.copyright">© 2026 QOSYU — цифровая платформа первой мили экологической логистики Казахстана</p>
   </footer>
 
-  <!-- ======================= МОДАЛКА ======================= -->
   <div class="modal-backdrop hidden" id="modalBackdrop">
     <div class="modal-box" role="dialog" aria-modal="true">
       <div id="modalContent"></div>
-      <button class="modal-close" id="modalCloseBtn" aria-label="Закрыть">×</button>
+      <button class="modal-close" id="modalCloseBtn" aria-label="Close">×</button>
     </div>
   </div>
 
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/static/js/i18n.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

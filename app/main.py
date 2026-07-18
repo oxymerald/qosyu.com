@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
@@ -14,6 +15,8 @@ from config import settings
 from database import async_session_maker, engine
 from models import Base, User, UserRole
 from routers import (
+    admin,
+    ai,
     analytics,
     auth,
     chat,
@@ -88,6 +91,7 @@ app = FastAPI(
 # --- Middleware (порядок: снаружи внутрь) ---
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 if settings.trusted_hosts != ["*"]:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 if settings.cors_origins:
@@ -117,6 +121,8 @@ app.include_router(chat.router)
 app.include_router(marketplace.router)
 app.include_router(reviews.router)
 app.include_router(push.router)
+app.include_router(admin.router)
+app.include_router(ai.router)
 
 
 @app.get("/health", tags=["service"])
@@ -125,7 +131,17 @@ async def health():
 
 
 # --- Статика и фронтенд ---
-app.mount("/static", StaticFiles(directory="static"), name="static")
+class CachedStaticFiles(StaticFiles):
+    """Статика с кэшированием в браузере (у файлов есть ETag для инвалидации)."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        return response
+
+
+app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 
 
 @app.get("/", include_in_schema=False)

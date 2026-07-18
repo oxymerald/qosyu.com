@@ -63,6 +63,18 @@ async def me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.post(
+    "/telegram-link-code",
+    dependencies=[Depends(rate_limit("tg-link-code", limit=10, window_seconds=600))],
+)
+async def telegram_link_code(current_user: User = Depends(get_current_user)):
+    """Одноразовый код для привязки Telegram: отправьте боту /link <код>."""
+    from services.link_codes import CODE_TTL_SECONDS, issue
+
+    code = await issue(current_user.id)
+    return {"code": code, "expires_in": CODE_TTL_SECONDS}
+
+
 @router.post("/change-password")
 async def change_password(
     data: PasswordChange,
