@@ -305,10 +305,49 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 QOSYU Bot\n\n"
         "/start — регистрация и главное меню\n"
+        "/link <код> — привязать веб-аккаунт (код в личном кабинете на сайте)\n"
         "/help — эта справка\n"
         "/cancel — отменить текущее действие\n\n"
         "Заявка на вывоз вторсырья создаётся за 20 секунд:\n"
         "тип → вес → геолокация. Остальное сделает платформа."
+    )
+
+
+async def link_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Привязка Telegram к веб-аккаунту по одноразовому коду с сайта."""
+    from services.link_codes import redeem
+
+    if not context.args:
+        await update.message.reply_text(
+            "Использование: /link <код>\n\n"
+            "Код выдаётся в личном кабинете на сайте — кнопка «Привязать Telegram»."
+        )
+        return
+    user_id = await redeem(context.args[0])
+    if user_id is None:
+        await update.message.reply_text(
+            "❌ Код неверный или просрочен. Получите новый в личном кабинете."
+        )
+        return
+    chat_id = update.effective_chat.id
+    async with async_session_maker() as db:
+        # Отвязываем этот chat_id от любого другого аккаунта
+        old = await db.execute(select(User).where(User.telegram_chat_id == chat_id))
+        old_user = old.scalar_one_or_none()
+        if old_user is not None and old_user.id != user_id:
+            old_user.telegram_chat_id = None
+        target = await db.get(User, user_id)
+        if target is None:
+            await update.message.reply_text("❌ Аккаунт не найден.")
+            return
+        target.telegram_chat_id = chat_id
+        await db.commit()
+        company = target.company_name
+    await update.message.reply_text(
+        f"✅ Готово! Telegram привязан к аккаунту «{company}».\n\n"
+        "Теперь вы будете получать уведомления о вывозе и сможете "
+        "создавать заявки прямо здесь.",
+        reply_markup=main_keyboard(),
     )
 
 
@@ -340,6 +379,7 @@ def setup_bot() -> Application:
 
     application.add_handler(registration)
     application.add_handler(request_creation)
+    application.add_handler(CommandHandler("link", link_account))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(my_requests, pattern="^my$"))
     application.add_handler(CallbackQueryHandler(esg_report, pattern="^esg$"))

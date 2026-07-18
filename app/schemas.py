@@ -1,7 +1,14 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from auth import validate_password_strength
 from models import RequestStatus, UserRole, WasteType, ZoneStatus
@@ -67,6 +74,13 @@ class UserOut(BaseModel):
     company_name: Optional[str] = None
     role: UserRole
     rating_avg: float = 0.0
+    # Скрытое исходное поле — наружу отдаём только производный флаг ниже
+    telegram_chat_id: Optional[int] = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def telegram_linked(self) -> bool:
+        return self.telegram_chat_id is not None
 
     class Config:
         from_attributes = True

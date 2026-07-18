@@ -23,8 +23,16 @@ class Settings(BaseSettings):
     MAX_BODY_SIZE: int = 1_000_000  # 1 МБ на запрос
 
     # --- Интеграции ---
-    OSRM_BASE_URL: str = "http://osrm:5000"
+    # Публичный демо-сервер OSRM: работает из коробки. Для production —
+    # свой OSRM-инстанс или OpenRouteService (см. README).
+    OSRM_BASE_URL: str = "https://router.project-osrm.org"
     TELEGRAM_BOT_TOKEN: str = ""
+    # --- AI (Claude) ---
+    ANTHROPIC_API_KEY: str = ""
+    AI_MODEL: str = "claude-opus-4-8"
+    # --- Пилотная зона (депо переработчика по умолчанию) ---
+    DEPOT_LAT: float = 47.1167  # Атырау
+    DEPOT_LON: float = 51.8833
     VAPID_PRIVATE_KEY: str = ""
     VAPID_PUBLIC_KEY: str = ""
     VAPID_EMAIL: str = "info@qosyu.kz"
