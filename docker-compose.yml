@@ -2,24 +2,23 @@ services:
   db:
     image: postgis/postgis:15-3.4
     environment:
-      TELEGRAM_BOT_TOKEN: 8682827104:AAEIWbKlGlhq53A7kPwX2ZRjDXLAdggfZR0
-      POSTGRES_USER: qosyu
-      POSTGRES_PASSWORD: qosyu
-      POSTGRES_DB: qosyu
+      POSTGRES_USER: ${POSTGRES_USER:-qosyu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: ${POSTGRES_DB:-qosyu}
+    # БД доступна только с локальной машины (для отладки); в production уберите ports
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qosyu -d qosyu"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qosyu} -d ${POSTGRES_DB:-qosyu}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    # Наружу не публикуем: Redis нужен только бэкенду
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -29,23 +28,25 @@ services:
   backend:
     build: .
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8080}:8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      PYTHONPATH: /app
-      DATABASE_URL: postgresql+asyncpg://qosyu:qosyu@db:5432/qosyu
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-qosyu}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-qosyu}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: my-super-secret-key-for-qosyu-2024
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 43200
-    volumes:
-      - ./app:/app
-    working_dir: /app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      SECRET_KEY: ${SECRET_KEY:?Задайте SECRET_KEY в .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-http://osrm:5000}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_EMAIL: ${VAPID_EMAIL:-info@qosyu.kz}
 
 volumes:
   pgdata:
