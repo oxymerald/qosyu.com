@@ -118,7 +118,7 @@ class DgisTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(error.exception.status_code, 422)
 
     async def test_unavailable_provider_falls_back_with_explicit_warning(self):
-        with patch.object(settings, "DGIS_API_KEY", "unit-test-secret"), patch.object(dgis, "road_route", AsyncMock(side_effect=HTTPException(429, "quota"))), patch.object(geo, "osrm_trip", AsyncMock(return_value=None)):
+        with patch.object(settings, "DGIS_API_KEY", "unit-test-secret"), patch.object(dgis, "road_matrix", AsyncMock(side_effect=HTTPException(429, "quota"))), patch.object(dgis, "road_route", AsyncMock(side_effect=HTTPException(429, "quota"))), patch.object(geo, "osrm_trip", AsyncMock(return_value=None)):
             route = await geo.compute_route(self.points[0], self.points[1:3], "")
         self.assertEqual(route["source"], "heuristic")
         self.assertEqual(route["provider_warning"], "2gis_unavailable")

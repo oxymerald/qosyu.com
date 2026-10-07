@@ -135,6 +135,29 @@ def build_local_route(depot: tuple[float, float], stops: list[tuple[float, float
 
 # ---------- OSRM ----------
 
+def matrix_stop_order(matrix):
+    """Exact small directed tour by dynamic programming; depot has index zero."""
+    count = len(matrix) - 1
+    if not 1 <= count <= 8:
+        raise ValueError("Expected 1–8 stops")
+    paths = {(1 << i, i): (matrix[0][i + 1], [i]) for i in range(count)}
+    for mask in range(1, 1 << count):
+        for last in range(count):
+            entry = paths.get((mask, last))
+            if entry is None:
+                continue
+            cost, order = entry
+            for nxt in range(count):
+                if mask & (1 << nxt):
+                    continue
+                key = (mask | (1 << nxt), nxt)
+                candidate = (cost + matrix[last + 1][nxt + 1], order + [nxt])
+                if key not in paths or candidate[0] < paths[key][0]:
+                    paths[key] = candidate
+    complete = (1 << count) - 1
+    return min((paths[(complete, last)][0] + matrix[last + 1][0], paths[(complete, last)][1])
+               for last in range(count))[1]
+
 async def osrm_trip(
     depot: tuple[float, float], stops: list[tuple[float, float]], osrm_url: str
 ) -> dict | None:
@@ -216,10 +239,19 @@ async def compute_route(
     from fastapi import HTTPException
     warning = None
     if use_dgis and settings.DGIS_API_KEY and stops:
-        from services.dgis import road_route
+        from services.dgis import road_matrix, road_route
         order = _two_opt(depot, stops, _nearest_neighbor_order(depot, stops))
+        order_source = "geographic"
+        if 2 <= len(stops) <= 8:
+            try:
+                order = matrix_stop_order(await road_matrix(depot, stops))
+                order_source = "2gis_matrix"
+            except HTTPException:
+                pass
         try:
-            return await road_route(depot, stops, order)
+            route = await road_route(depot, stops, order)
+            route["order_source"] = order_source if len(stops) > 1 else "single_stop"
+            return route
         except HTTPException:
             warning = "2gis_unavailable"
     route = await osrm_trip(depot, stops, osrm_url)

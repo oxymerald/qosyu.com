@@ -7,7 +7,7 @@
   <title>QOSYU — цифровая первая миля переработки в Казахстане</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23990011'/%3E%3Ctext x='50' y='68' font-size='52' font-family='Georgia' fill='%23FCF6F5' text-anchor='middle'%3EQ%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://unpkg.com" />
-  <link rel="stylesheet" href="/static/css/app.css?v=20261007-route-mobile" />
+  <link rel="stylesheet" href="/static/css/app.css?v=20261007-workspace" />
 </head>
 <body>
 
@@ -25,7 +25,7 @@
         <a href="#problem" data-i18n="nav.problem">Проблема</a>
         <a href="#solution" data-i18n="nav.solution">Решение</a>
         <a href="#how" data-i18n="nav.how">Как работает</a>
-        <a href="#pricing" data-i18n="nav.pricing">Тарифы</a>
+        <a href="#pricing" data-i18n="nav.pricing">Пилот</a>
         <a href="#team" data-i18n="nav.team">Команда</a>
       </nav>
       <div class="header-right">
@@ -40,160 +40,21 @@
   </header>
 
   <!-- ======================= ЛЕНДИНГ ======================= -->
-  <main id="landingPage">
-
-    <section class="hero" id="top">
-      <div class="hero-inner">
-        <p class="hero-eyebrow" data-i18n="hero.eyebrow">Экологическая логистика · Атырау, Казахстан</p>
-        <h1 class="hero-title" data-i18n="hero.title">Каждый день сотни кафе, магазинов и офисов выбрасывают по 10–20 кг картона и пластика.</h1>
-        <p class="hero-sub" data-i18n="hero.sub">Для переработчиков такие объёмы нерентабельны — поэтому вторсырьё оказывается на полигоне вместо переработки.</p>
-        <div class="hero-divider" aria-hidden="true"></div>
-        <p class="hero-reveal" data-i18n="hero.reveal">Мы создали <strong>QOSYU</strong> — цифровую платформу первой мили экологической логистики.</p>
-        <div class="hero-cta">
-          <button class="btn btn-cream" data-action="register" data-i18n="hero.cta.primary">Сдать вторсырьё</button>
-          <a class="btn btn-ghost-cream" href="#solution" data-i18n="hero.cta.secondary">Как это работает</a>
-        </div>
+  <main id="landingPage" class="landing-refresh">
+    <section class="product-hero" id="top">
+      <div class="product-intro"><p class="product-eyebrow" data-i18n="public.eyebrow">QOSYU · Атырау</p><h1 data-i18n="public.title">Вторсырьё рядом.
+Соберём маршрут.</h1><p class="product-sub" data-i18n="public.sub">Магазин отмечает, что готово к вывозу. Переработчик видит соседние заявки и планирует объезд на одной карте.</p>
+        <button class="btn btn-wine" data-action="register" data-i18n="public.cta">Открыть QOSYU</button><p class="product-caption" data-i18n="public.demo">Рабочий прототип · готовимся к первым проверкам с бизнесом</p>
       </div>
-
-      <div class="stats-band reveal">
-        <div class="stat"><span class="stat-num">1,1%</span><span class="stat-cap" data-i18n="stats.1.cap">коммунальных отходов реально становится вторсырьём</span></div>
-        <div class="stat"><span class="stat-num">48,3&nbsp;млн&nbsp;т</span><span class="stat-cap" data-i18n="stats.2.cap">отходов уже накоплено на полигонах страны</span></div>
-        <div class="stat"><span class="stat-num">20,6%</span><span class="stat-cap" data-i18n="stats.3.cap">из ~3000 полигонов соответствуют экологическим нормам</span></div>
-      </div>
-      <p class="stats-sources" data-i18n="stats.sources">Источники: energyprom.kz, kapital.kz</p>
-    </section>
-
-    <section class="section" id="problem">
-      <h2 class="section-title" data-i18n="problem.title">Три причины, почему вторсырьё малого бизнеса не перерабатывается</h2>
-      <div class="cards-3">
-        <article class="card reveal"><span class="num-circle">1</span><h3 data-i18n="problem.1.h">Разрозненность</h3><p data-i18n="problem.1.p">Малые партии по 10–20 кг в каждой отдельной точке — кафе, магазине, офисе.</p></article>
-        <article class="card reveal"><span class="num-circle">2</span><h3 data-i18n="problem.2.h">Логистический тупик</h3><p data-i18n="problem.2.p">Переработчику невыгодно отправлять машину ради одной точки с парой коробок картона.</p></article>
-        <article class="card reveal"><span class="num-circle">3</span><h3 data-i18n="problem.3.h">Итог</h3><p data-i18n="problem.3.p">Ценное сырьё едет на полигон, а углеродный след города продолжает расти.</p></article>
+      <div class="product-scheme"><h2 data-i18n="public.mapTitle">От заявки до сбора</h2>
+        <div class="scheme-track"><div class="scheme-place"><span>01</span><p data-i18n="public.map1">Магазин · заявка</p></div><div class="scheme-place"><span>02</span><p data-i18n="public.map2">Кафе · заявка</p></div><div class="scheme-place scheme-finish"><span>Q</span><p data-i18n="public.map3">Переработчик · маршрут</p></div></div><p class="product-caption" data-i18n="public.mapNote">Схема работы сервиса</p>
       </div>
     </section>
-
-    <section class="section section-blush" id="solution">
-      <h2 class="section-title" data-i18n="fm.title">Что такое First Mile</h2>
-      <p class="section-sub" data-i18n="fm.sub">Первая миля — этап, где мелкие, разрозненные объёмы вторсырья от бизнеса объединяются в экономически выгодный маршрут для переработчика.</p>
-      <div class="flow-diagram">
-        <div class="flow-block reveal"><h4 data-i18n="fm.business.h">Бизнес</h4><p data-i18n="fm.business.p">кафе, магазины, офисы</p></div>
-        <div class="flow-arrow" aria-hidden="true">→</div>
-        <div class="flow-block flow-accent reveal"><h4 data-i18n="fm.qosyu.h">QOSYU · First Mile</h4><p data-i18n="fm.qosyu.p">объединяет заявки в маршрут</p></div>
-        <div class="flow-arrow" aria-hidden="true">→</div>
-        <div class="flow-block reveal"><h4 data-i18n="fm.recycler.h">Переработчик</h4><p data-i18n="fm.recycler.p">забирает готовый объём</p></div>
-      </div>
+    <section class="section" id="problem"><h2 class="section-title" data-i18n="public.problemTitle">Небольшие партии проще увидеть вместе</h2><p class="section-sub" data-i18n="public.problemSub">Идея QOSYU — помочь бизнесу и переработчикам договориться о сборе. Пользу такого подхода ещё предстоит проверить в реальных выездах.</p>
+      <div class="cards-3" id="solution"><article class="card"><span class="feature-number">01</span><h3 data-i18n="public.feature1">Заявки с адресом</h3><p data-i18n="public.feature1p">Укажите вид сырья, массу, точку на карте и как подъехать к месту сбора.</p></article><article class="card"><span class="feature-number">02</span><h3 data-i18n="public.feature2">Планирование на карте</h3><p data-i18n="public.feature2p">Найдите адрес, выберите старт и просмотрите порядок остановок, расстояние и оценку времени.</p></article><article class="card"><span class="feature-number">03</span><h3 data-i18n="public.feature3">Помощник по заявкам</h3><p data-i18n="public.feature3p">Задавайте вопросы о доступных вам заявках. ИИ помогает найти точки, а дорожный сервис рассчитывает маршрут.</p></article></div>
     </section>
-
-    <section class="section">
-      <h2 class="section-title" data-i18n="now.title">Почему сейчас</h2>
-      <div class="cards-4">
-        <article class="card card-row reveal"><span class="num-circle">1</span><div><h3 data-i18n="now.1.h">Государственная повестка</h3><p data-i18n="now.1.p">Инициатива «Таза Қазақстан» продвигает переработку на уровне страны.</p></div></article>
-        <article class="card card-row reveal"><span class="num-circle">2</span><div><h3 data-i18n="now.2.h">Рост требований к ESG</h3><p data-i18n="now.2.p">Бизнесу нужна прозрачная экологическая отчётность.</p></div></article>
-        <article class="card card-row reveal"><span class="num-circle">3</span><div><h3 data-i18n="now.3.h">Спрос переработчиков</h3><p data-i18n="now.3.p">Им нужен стабильный поток вторсырья без затрат на логистику.</p></div></article>
-        <article class="card card-row reveal"><span class="num-circle">4</span><div><h3 data-i18n="now.4.h">Дешевеющая цифровизация</h3><p data-i18n="now.4.p">AI-маршрутизация и гео-сервисы стали доступны малым командам.</p></div></article>
-      </div>
-    </section>
-
-    <section class="section section-blush" id="how">
-      <h2 class="section-title" data-i18n="ai.title">Как AI создаёт ценность</h2>
-      <div class="steps-row">
-        <div class="step reveal"><span class="step-circle">1</span><p><strong data-i18n="ai.1.h">Кафе</strong><br /><span data-i18n="ai.1.p">15 кг картона</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">2</span><p><strong data-i18n="ai.2.h">Заявка</strong><br /><span data-i18n="ai.2.p">за 10 секунд</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">3</span><p><strong data-i18n="ai.3.h">AI объединяет</strong><br /><span data-i18n="ai.3.p">25 соседних заявок</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">4</span><p><strong data-i18n="ai.4.h">Маршрут</strong><br /><span data-i18n="ai.4.p">оптимальный по гео</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle step-green">5</span><p><strong data-i18n="ai.5.h">Переработчик</strong><br /><span data-i18n="ai.5.p">забирает сразу 450 кг</span></p></div>
-      </div>
-      <blockquote class="quote-block" data-i18n="ai.quote">«Сегодня переработчик не поедет за 15 кг картона в одно кафе. Но если AI объединит 25 соседних кафе в один маршрут — получится 400–500 кг вторсырья за один рейс. Именно в этом ценность QOSYU.»</blockquote>
-    </section>
-
-    <section class="section" id="compare">
-      <h2 class="section-title" data-i18n="cmp.title">Почему существующие решения не закрывают эту проблему</h2>
-      <div class="table-wrap">
-        <table class="compare-table">
-          <thead><tr><th data-i18n="cmp.criterion">Критерий</th><th>Спецавтобаза</th><th>TazaQazBot</th><th class="col-qosyu">QOSYU</th></tr></thead>
-          <tbody>
-            <tr><td data-i18n="cmp.r1">Основная задача</td><td>Вывоз бытовых отходов</td><td>Жалобы на свалки</td><td class="col-qosyu">Управление потоком вторсырья</td></tr>
-            <tr><td data-i18n="cmp.r2">Целевая аудитория</td><td>Население</td><td>Любой гражданин</td><td class="col-qosyu">Малый и средний бизнес</td></tr>
-            <tr><td data-i18n="cmp.r3">Работа с вторсырьём</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
-            <tr><td data-i18n="cmp.r4">Сбор малых объёмов</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
-            <tr><td data-i18n="cmp.r5">AI-маршрутизация</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
-            <tr><td data-i18n="cmp.r6">ESG-отчётность</td><td data-i18n="cmp.no">Нет</td><td data-i18n="cmp.no">Нет</td><td class="col-qosyu" data-i18n="cmp.yes">Да</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="note-plate" data-i18n="cmp.note">Мы не заменяем коммунальные службы: они работают с бытовыми отходами по утверждённым маршрутам. QOSYU создаёт цифровую платформу для коммерческого вторсырья малого бизнеса, где сегодня нет эффективной координации.</div>
-    </section>
-
-    <section class="section section-blush">
-      <h2 class="section-title" data-i18n="journey.title">Customer Journey предпринимателя</h2>
-      <div class="steps-row steps-journey">
-        <div class="step reveal"><span class="step-circle">1</span><p><strong data-i18n="journey.1.h">Открыл Telegram</strong><br /><span data-i18n="journey.1.p">нашёл бота QOSYU</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">2</span><p><strong data-i18n="journey.2.h">Заполнил заявку</strong><br /><span data-i18n="journey.2.p">за 20 секунд</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">3</span><p><strong data-i18n="journey.3.h">Получил дату вывоза</strong><br /><span data-i18n="journey.3.p">система назначает зону</span></p></div>
-        <div class="step-arrow" aria-hidden="true">→</div>
-        <div class="step reveal"><span class="step-circle">4</span><p><strong data-i18n="journey.4.h">Получил ESG-отчёт</strong><br /><span data-i18n="journey.4.p">метрики для отчётности</span></p></div>
-      </div>
-      <div class="note-plate" data-i18n="journey.note">Никакой сложной логистики со стороны бизнеса — вся оптимизация происходит на стороне платформы.</div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title" data-i18n="benefit.title">Выгода для каждой стороны</h2>
-      <div class="benefit-cols">
-        <div class="benefit-col reveal"><h3 data-i18n="benefit.business">Бизнес</h3><ul class="check-list"><li data-i18n="benefit.b1">Бесплатный или дешёвый вывоз вторсырья</li><li data-i18n="benefit.b2">Готовая ESG-отчётность без лишних усилий</li><li data-i18n="benefit.b3">Меньше мусора и расходов на его утилизацию</li></ul></div>
-        <div class="benefit-col reveal"><h3 data-i18n="benefit.recycler">Переработчик</h3><ul class="check-list"><li data-i18n="benefit.r1">Полная машина вместо полупустых рейсов</li><li data-i18n="benefit.r2">Экономия топлива и времени в пути</li><li data-i18n="benefit.r3">Оптимальный, заранее просчитанный маршрут</li></ul></div>
-      </div>
-    </section>
-
-    <section class="section section-blush" id="pricing">
-      <h2 class="section-title" data-i18n="pricing.title">Тарифы</h2>
-      <p class="section-sub" data-i18n="pricing.sub">MVP уже работает: сайт, Telegram-бот, карта сбора и заявки — единый поток от заявки до вывоза.</p>
-      <div class="pricing-grid">
-        <article class="price-card reveal">
-          <h3 class="price-name">Start</h3>
-          <p class="price-value">0&nbsp;₸<span data-i18n="pricing.month">/мес</span></p>
-          <ul class="check-list"><li data-i18n="pricing.start.f1">До 5 заявок в месяц</li><li data-i18n="pricing.start.f2">Базовая кластеризация</li><li data-i18n="pricing.start.f3">ESG-отчёт в PDF</li></ul>
-          <button class="btn btn-outline" data-action="register" data-i18n="pricing.start.cta">Начать бесплатно</button>
-        </article>
-        <article class="price-card price-featured reveal">
-          <span class="price-badge" data-i18n="pricing.popular">Популярный</span>
-          <h3 class="price-name">Pro</h3>
-          <p class="price-value">9&nbsp;900&nbsp;₸<span data-i18n="pricing.month">/мес</span></p>
-          <ul class="check-list"><li data-i18n="pricing.pro.f1">Неограниченные заявки</li><li data-i18n="pricing.pro.f2">Приоритетная кластеризация</li><li data-i18n="pricing.pro.f3">API для интеграции</li><li data-i18n="pricing.pro.f4">Поддержка 24/7</li></ul>
-          <button class="btn btn-cream" data-action="register" data-i18n="pricing.pro.cta">Выбрать Pro</button>
-        </article>
-        <article class="price-card reveal">
-          <h3 class="price-name">Enterprise</h3>
-          <p class="price-value" data-i18n="pricing.ent.price">Индивидуально</p>
-          <ul class="check-list"><li data-i18n="pricing.ent.f1">Индивидуальный SLA</li><li data-i18n="pricing.ent.f2">Выделенные машины</li><li data-i18n="pricing.ent.f3">Белая маркировка</li></ul>
-          <button class="btn btn-outline" data-action="register" data-i18n="pricing.ent.cta">Связаться</button>
-        </article>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title" data-i18n="roadmap.title">Roadmap 2026</h2>
-      <div class="roadmap">
-        <div class="roadmap-node"><span class="step-circle">1</span><p data-i18n="roadmap.1">MVP</p></div>
-        <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">2</span><p data-i18n="roadmap.2">50 компаний</p></div>
-        <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">3</span><p data-i18n="roadmap.3">Партнёрства</p></div>
-        <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">4</span><p data-i18n="roadmap.4">Атырау</p></div>
-        <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle">5</span><p data-i18n="roadmap.5">Актау</p></div>
-        <div class="roadmap-line" aria-hidden="true"></div>
-        <div class="roadmap-node"><span class="step-circle step-green">6</span><p data-i18n="roadmap.6">Весь Казахстан</p></div>
-      </div>
-      <div class="note-plate" data-i18n="roadmap.note">От MVP в одном городе — к сети региональных зон сбора: сперва подтверждаем экономику на Атырау, затем масштабируем модель на Актау и другие города Казахстана.</div>
-    </section>
-
+    <section class="section section-blush" id="how"><h2 class="section-title" data-i18n="public.howTitle">Три шага к согласованному вывозу</h2><div class="cards-3"><article class="card"><span class="num-circle">1</span><h3 data-i18n="public.step1">Оставьте заявку</h3><p data-i18n="public.step1p">Бизнес выбирает точку и описывает вторсырьё. Заявка появляется в личном кабинете.</p></article><article class="card"><span class="num-circle">2</span><h3 data-i18n="public.step2">Проверьте маршрут</h3><p data-i18n="public.step2p">Переработчик объединяет соседние заявки, смотрит объезд и берёт зону в работу.</p></article><article class="card"><span class="num-circle">3</span><h3 data-i18n="public.step3">Договоритесь о сборе</h3><p data-i18n="public.step3p">Уточните время и условия в чате. После вывоза переработчик отмечает завершение.</p></article></div></section>
+    <section class="section pilot-section" id="pricing"><h2 class="section-title" data-i18n="public.pilotTitle">Сначала — проверка в Атырау</h2><p class="section-sub" data-i18n="public.pilotSub">Сайт уже позволяет пройти путь от заявки до отметки о сборе. Сейчас мы собираем обратную связь магазинов и кафе, чтобы подготовить первый пилот.</p><p class="note-plate" data-i18n="public.pilotNote">Вывоз, его стоимость и время согласуются с переработчиком. Платные тарифы и гарантированные сроки пока не предлагаются.</p><button class="btn btn-wine" data-action="register" data-i18n="public.pilotCta">Попробовать прототип</button></section>
     <section class="section section-blush" id="team">
       <h2 class="section-title" data-i18n="team.title">Наша команда</h2>
       <div class="team-grid">
@@ -203,22 +64,7 @@
         <article class="team-card reveal"><span class="avatar">ЮА</span><h3>Юсупова Асылназ</h3><p data-i18n="team.bizdev">Business Development</p></article>
       </div>
     </section>
-
-    <section class="section">
-      <h2 class="section-title" data-i18n="effect.title">Ожидаемый экологический и социальный результат</h2>
-      <div class="benefit-cols">
-        <div class="benefit-col reveal"><h3 data-i18n="effect.social">Social</h3><ul class="check-list"><li data-i18n="effect.s1">Сокращение пробега грузовиков переработчиков за счёт гео-кластеризации</li><li data-i18n="effect.s2">Снижение объёма полезных отходов, отправляемых на городские свалки</li></ul></div>
-        <div class="benefit-col reveal"><h3 data-i18n="effect.env">Environmental</h3><ul class="check-list"><li data-i18n="effect.e1">Культура осознанного потребления и авторасчёт эко-метрик для бизнеса</li><li data-i18n="effect.e2">Прозрачная ESG-отчётность, повышающая инвестиционную привлекательность</li></ul></div>
-      </div>
-      <p class="footnote" data-i18n="effect.note">Оценка сокращения пробега — по результатам моделирования маршрутов на пилотной зоне; будет уточнена после первых реальных выездов.</p>
-    </section>
-
-    <section class="final-band">
-      <h2 data-i18n="final.title">Мы превращаем разрозненные отходы малого бизнеса в управляемый поток вторсырья.</h2>
-      <p class="final-sub"><em data-i18n="final.sub">QOSYU — цифровая первая миля переработки в Казахстане.</em></p>
-      <button class="btn btn-cream" data-action="register" data-i18n="final.cta">Присоединиться к платформе</button>
-      <p class="final-love" data-i18n="final.love">with love, QOSYU team</p>
-    </section>
+    <section class="final-band"><h2 data-i18n="public.final">Одна карта для бизнеса и переработчика</h2><button class="btn btn-cream" data-action="register" data-i18n="public.cta">Открыть QOSYU</button></section>
   </main>
 
   <!-- ======================= ЛИЧНЫЙ КАБИНЕТ ======================= -->
@@ -235,6 +81,7 @@
     </div>
 
     <section class="tab-pane" id="pane-map">
+      <button id="mapSheetToggle" class="map-sheet-toggle" aria-controls="cabinetActions" aria-expanded="true" data-i18n="map.hidePanel">Свернуть панель</button>
       <aside class="cabinet-side">
         <div id="cabinetUserCard" class="side-card"><!-- js --></div>
         <div id="cabinetActions" class="side-stack"><!-- js --></div>
@@ -323,7 +170,7 @@
 
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 
-  <script src="/static/js/i18n.js?v=20261007-dgis"></script>
-  <script src="/static/js/app.js?v=20261007-dgis"></script>
+  <script src="/static/js/i18n.js?v=20261007-workspace"></script>
+  <script src="/static/js/app.js?v=20261007-workspace"></script>
 </body>
 </html>

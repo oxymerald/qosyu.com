@@ -17,6 +17,7 @@ from models import (
 from schemas import CollectionZoneOut, ZoneComplete
 from services.esg import calculate_co2_saved
 from services.geo import compute_route
+from security import rate_limit
 
 router = APIRouter()
 
@@ -98,7 +99,7 @@ async def assign_zone(
     return {"message": "Зона закреплена за вами"}
 
 
-@router.get("/zones/{zone_id}/route")
+@router.get("/zones/{zone_id}/route", dependencies=[Depends(rate_limit("route-preview", limit=30, window_seconds=60)), Depends(rate_limit("route-hour", limit=60, window_seconds=3600))])
 async def zone_route(
     zone_id: int,
     start_lat: float | None = Query(None, ge=-90, le=90),
@@ -150,12 +151,15 @@ async def zone_route(
                 "waste_type": req.waste_type.value,
                 "weight_kg": req.weight_kg,
                 "company": companies.get(req.id),
+                "address": req.address,
+                "pickup_note": req.pickup_note,
             }
         )
 
     return {
         "zone_id": zone.id,
         "source": route["source"],
+        "order_source": route.get("order_source", "osrm_trip" if route["source"] == "osrm" else "geographic"),
         "approximate": route["source"] not in ("osrm", "2gis"),
         "provider_warning": route.get("provider_warning"),
         "service_minutes_per_stop": 6,

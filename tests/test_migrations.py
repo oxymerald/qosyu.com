@@ -1,0 +1,40 @@
+import os
+import unittest
+import uuid
+from sqlalchemy import text
+from database import engine
+from migrations import upgrade_schema
+from schemas import WasteRequestCreate
+from pydantic import ValidationError
+
+
+class PickupValidationTests(unittest.TestCase):
+    def test_optional_trimmed_and_bounded_details(self):
+        args = dict(waste_type="cardboard", weight_kg=12, latitude=47, longitude=51)
+        self.assertIsNone(WasteRequestCreate(**args).address)
+        value = WasteRequestCreate(**args, address="  Abay 1  ", pickup_note="  ")
+        self.assertEqual(value.address, "Abay 1")
+        self.assertIsNone(value.pickup_note)
+        for field, length in [("address", 301), ("pickup_note", 501)]:
+            with self.assertRaises(ValidationError):
+                WasteRequestCreate(**args, **{field: "x" * length})
+
+
+@unittest.skipUnless(os.getenv("QOSYU_ISOLATED_TEST") == "1", "isolated DB only")
+class MigrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_existing_table_survives_repeated_upgrade(self):
+        schema = "migration_test_" + uuid.uuid4().hex
+        async with engine.connect() as conn:
+            transaction = await conn.begin()
+            try:
+                await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+                await conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                await conn.execute(text("CREATE TABLE waste_requests (id INTEGER PRIMARY KEY, weight_kg FLOAT NOT NULL)"))
+                await conn.execute(text("INSERT INTO waste_requests VALUES (17, 25.5)"))
+                await upgrade_schema(conn)
+                await upgrade_schema(conn)
+                row = (await conn.execute(text("SELECT id, weight_kg, address, pickup_note FROM waste_requests"))).one()
+                self.assertEqual(tuple(row), (17, 25.5, None, None))
+            finally:
+                await transaction.rollback()
+        await engine.dispose()

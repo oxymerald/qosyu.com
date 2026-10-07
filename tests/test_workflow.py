@@ -25,9 +25,12 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await client.post("/requests/create", headers=recycler, json={"waste_type": "plastic", "weight_kg": 5, "latitude": 47.1, "longitude": 51.88})).status_code, 403)
             ids = []
             for lat, lon in [(47.1167, 51.88), (47.1167, 51.904), (47.3, 52.1)]:
-                r = await client.post("/requests/create", headers=sme, json={"waste_type": "cardboard", "weight_kg": 10, "latitude": lat, "longitude": lon})
+                r = await client.post("/requests/create", headers=sme, json={"waste_type": "cardboard", "weight_kg": 10, "latitude": lat, "longitude": lon, "address": "  Test street 1  ", "pickup_note": "Courtyard entrance <test>"})
                 self.assertEqual(r.status_code, 201, r.text)
+                self.assertEqual(r.json()["address"], "Test street 1")
                 ids.append(r.json()["id"])
+            saved = (await client.get("/requests/my", headers=sme)).json()
+            self.assertTrue(all(r["pickup_note"] == "Courtyard entrance <test>" for r in saved))
             self.assertEqual(len((await client.get("/requests/my", headers=sme)).json()), 3)
             self.assertEqual((await client.get("/requests/my", headers=other)).json(), [])
             # Two workers may run together, but a request must never appear in two zones.
@@ -44,6 +47,10 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(route["approximate"])
                 self.assertEqual(route["source"], "heuristic")
                 relevant = [s["request_id"] for s in route["stops"] if s["request_id"] in ids]
+                for stop in route["stops"]:
+                    if stop["request_id"] in ids:
+                        self.assertEqual(stop["address"], "Test street 1")
+                        self.assertEqual(stop["pickup_note"], "Courtyard entrance <test>")
                 seen.extend(relevant)
                 if ids[0] in relevant:
                     selected_zone = zid

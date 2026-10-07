@@ -28,6 +28,8 @@ async def create_request(
         weight_kg=req.weight_kg,
         latitude=req.latitude,
         longitude=req.longitude,
+        address=req.address,
+        pickup_note=req.pickup_note,
         location_geom=func.ST_SetSRID(func.ST_MakePoint(req.longitude, req.latitude), 4326),
         status=RequestStatus.PENDING,
     )

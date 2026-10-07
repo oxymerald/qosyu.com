@@ -100,6 +100,13 @@ class WasteRequestCreate(BaseModel):
     weight_kg: float = Field(..., gt=0, le=50_000)
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
+    address: Optional[str] = Field(None, max_length=300)
+    pickup_note: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("address", "pickup_note")
+    @classmethod
+    def clean_pickup_text(cls, value):
+        return value.strip() or None if value is not None else None
 
 
 class WasteRequestOut(BaseModel):
@@ -109,6 +116,8 @@ class WasteRequestOut(BaseModel):
     weight_kg: float
     latitude: float
     longitude: float
+    address: Optional[str] = None
+    pickup_note: Optional[str] = None
     status: RequestStatus
     created_at: datetime
 

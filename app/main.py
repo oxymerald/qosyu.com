@@ -14,6 +14,7 @@ from auth import get_password_hash
 from config import settings
 from database import async_session_maker, engine
 from models import Base, User, UserRole
+from migrations import upgrade_schema
 from routers import (
     admin,
     ai,
@@ -62,6 +63,7 @@ async def _bootstrap_admin():
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await upgrade_schema(conn)
     await rate_limiter.init()
     await _bootstrap_admin()
 

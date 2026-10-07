@@ -16,6 +16,56 @@ from config import settings
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 _route_cache = OrderedDict()
+_matrix_cache = OrderedDict()
+
+
+def parse_matrix(data, count):
+    matrix = [[None] * count for _ in range(count)]
+    for route in data["routes"]:
+        i, j = route["source_id"], route["target_id"]
+        value = route["duration"]
+        if type(i) is not int or type(j) is not int or not (0 <= i < count and 0 <= j < count):
+            raise ValueError("Invalid matrix indices")
+        if matrix[i][j] is not None or route["status"] != "OK":
+            raise ValueError("Duplicate or unreachable pair")
+        if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+            raise ValueError("Invalid duration")
+        matrix[i][j] = value
+    for i in range(count):
+        matrix[i][i] = 0  # Some providers omit self-to-self pairs.
+    if any(v is None for row in matrix for v in row):
+        raise ValueError("Incomplete matrix")
+    return matrix
+
+
+async def road_matrix(depot, stops):
+    """Bounded and cached directed travel-time matrix; no quota use in background."""
+    if not settings.DGIS_MATRIX_ENABLED or not 2 <= len(stops) <= 8:
+        raise HTTPException(422, "Матрица доступна для 2–8 остановок")
+    points = [depot] + stops
+    key = (hashlib.sha256(settings.DGIS_API_KEY.encode()).hexdigest(), tuple(map(tuple, points)))
+    cached = _matrix_cache.get(key)
+    if cached and time.monotonic() - cached[0] < 300:
+        if cached[1] is None:
+            raise HTTPException(503, "Матрица временно недоступна")
+        return copy.deepcopy(cached[1])
+    from security import rate_limiter
+    if not await rate_limiter.hit("dgis-matrix-budget", max(0, settings.DGIS_MATRIX_DAILY_REQUESTS), 86400):
+        raise HTTPException(429, "Дневной лимит расчётов матрицы исчерпан")
+    # Cache failed requests too so repeated previews don't burn quota.
+    _matrix_cache[key] = (time.monotonic(), None)
+    _matrix_cache.move_to_end(key)
+    while len(_matrix_cache) > 64:
+        _matrix_cache.popitem(last=False)
+    response = await request("POST", "https://routing.api.2gis.com/get_dist_matrix", params={"version": "2.0"}, json={
+        "points": [{"lat": lat, "lon": lon} for lat, lon in points],
+        "sources": list(range(len(points))), "targets": list(range(len(points)))})
+    try:
+        matrix = parse_matrix(response.json(), len(points))
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError):
+        raise HTTPException(502, "2ГИС не вернул полную матрицу дорог") from None
+    _matrix_cache[key] = (time.monotonic(), matrix)
+    return copy.deepcopy(matrix)
 
 
 async def request(method, url, **kwargs):

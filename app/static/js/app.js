@@ -142,6 +142,7 @@ const mainFooter = document.getElementById("mainFooter");
 const mainNav = document.getElementById("mainNav");
 
 function showLanding() {
+  document.body.classList.remove("workspace");
   landingPage.classList.remove("hidden");
   mainFooter.classList.remove("hidden");
   cabinetPage.classList.add("hidden");
@@ -150,6 +151,7 @@ function showLanding() {
 
 async function showCabinet() {
   if (!state.user) { openLoginModal(); return; }
+  document.body.classList.add("workspace");
   landingPage.classList.add("hidden");
   mainFooter.classList.add("hidden");
   cabinetPage.classList.remove("hidden");
@@ -439,6 +441,8 @@ function selectMapPoint(point) {
   if (!state.user || !state.map) return;
   state.selectedPoint = { lat: point.lat, lng: point.lng };
   state.selectedAddress = null;
+  const addressField = document.getElementById("reqAddress");
+  if (addressField) addressField.value = "";
   if (!state.selectedMarker) {
     state.selectedMarker = L.marker(point, { draggable: true }).addTo(state.map);
     state.selectedMarker.on("dragend", (e) => selectMapPoint(e.target.getLatLng()));
@@ -475,7 +479,7 @@ async function loadMapData() {
           radius: 7, color: ["collected", "verified"].includes(r.status) ? "#24815d" : "#990011",
           fillOpacity: 0.8,
         })
-          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} кг<br>${esc(statusLabel(r.status))}`)
+          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} кг<br>${esc(statusLabel(r.status))}${pickupDetails(r)}`)
           .addTo(state.markersLayer);
       });
       return;
@@ -536,6 +540,10 @@ function renderCabinetSidebar() {
         <input class="field" id="reqWeight" type="number" min="1" max="50000" step="0.5" placeholder="15" />
         <p class="meta">${esc(t("map.selectHint"))}</p>
         <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
+        <label for="reqAddress">${esc(t("cab.address"))}</label>
+        <input class="field" id="reqAddress" maxlength="300" value="${esc(state.selectedAddress || "")}" />
+        <label for="reqPickupNote">${esc(t("cab.pickupNote"))}</label>
+        <textarea class="field" id="reqPickupNote" maxlength="500" rows="2" placeholder="${esc(t("cab.pickupHint"))}"></textarea>
         <button class="btn btn-wine" id="createReqBtn">${esc(t("cab.createRequest"))}</button>
       </div>
       <div class="side-block">
@@ -617,6 +625,8 @@ function renderCabinetSidebar() {
             if (session !== state.sessionId || !state.map) return;
             selectMapPoint({ lat: item.lat, lng: item.lon });
             state.selectedAddress = item.name;
+            const addressField = document.getElementById("reqAddress");
+            if (addressField) addressField.value = item.name.slice(0, 300);
             updateSelectedPoint();
             state.map.setView([item.lat, item.lon], 17);
             state.selectedMarker.openPopup();
@@ -672,9 +682,12 @@ async function createRequestFromMap() {
       weight_kg: weight,
       latitude: center.lat,
       longitude: center.lng,
+      address: document.getElementById("reqAddress").value.trim() || null,
+      pickup_note: document.getElementById("reqPickupNote").value.trim() || null,
     });
     toast(t("toast.requestCreated"), "success");
     document.getElementById("reqWeight").value = "";
+    document.getElementById("reqPickupNote").value = "";
     await loadSmeSidebar();
     await loadMapData();
   } catch (err) { toast(err.message, "error"); }
@@ -687,7 +700,7 @@ async function loadSmeSidebar() {
     document.getElementById("sideRequestsList").innerHTML = reqs.length
       ? reqs.map((r) => `
           <div class="list-item">
-            <span>${esc(wasteLabel(r.waste_type))} · ${esc(r.weight_kg)} кг</span>
+            <span>${esc(wasteLabel(r.waste_type))} · ${esc(r.weight_kg)} кг${pickupDetails(r)}</span>
             <span class="status-chip ${r.status === "collected" || r.status === "verified" ? "ok" : ""}">${esc(statusLabel(r.status))}</span>
           </div>`).join("")
       : `<p class="meta">${esc(t("cab.noRequests"))}</p>`;
@@ -803,11 +816,11 @@ async function showZoneRoute(zoneId, startOverride) {
       L.marker([s.lat, s.lon], {
         icon: L.divIcon({ className: "route-stop", html: String(s.order), iconSize: [26, 26] }),
       })
-        .bindPopup(`${s.order}. ${esc(s.company || "")}<br>${esc(wasteLabel(s.waste_type))} — ${esc(s.weight_kg)} кг`)
+        .bindPopup(`${s.order}. ${esc(s.company || "")}<br>${esc(wasteLabel(s.waste_type))} — ${esc(s.weight_kg)} кг${pickupDetails(s)}`)
         .addTo(state.routeLayer);
     });
     const bounds = L.latLngBounds(route.geometry.length ? route.geometry : route.stops.map((s) => [s.lat, s.lon]));
-    if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [40, 40] });
+
 
     const srcLabel = route.source === "2gis" ? t("route.source.2gis") : route.source === "osrm" ? t("route.source.osrm") : t("route.source.heuristic");
     const panel = document.getElementById("routePanel");
@@ -823,11 +836,29 @@ async function showZoneRoute(zoneId, startOverride) {
       </div>
       ${route.approximate ? `<p class="route-warning">${esc(t("route.approxWarning"))}</p>` : ""}
       ${route.provider_warning ? `<p class="route-warning">${esc(t("route.providerFallback"))}</p>` : ""}
+      ${route.order_source === "2gis_matrix" ? `<p class="route-note">${esc(t("public.orderRoad"))}</p>` : route.source === "2gis" && route.order_source === "geographic" ? `<p class="route-warning">${esc(t("public.orderGeo"))}</p>` : ""}
+      <p class="route-note">${esc(t("route.limits"))}</p>
       <ol class="route-list">
-        ${route.stops.map((s) => `<li><span class="route-num">${s.order}</span> ${esc(s.company || "—")} · ${esc(wasteLabel(s.waste_type))} ${esc(s.weight_kg)} кг</li>`).join("")}
+        ${route.stops.map((s, i) => `<li><button class="route-stop-button" data-stop="${i}"><span class="route-num">${s.order}</span><span><strong>${esc(s.company || "—")}</strong><br>${esc(wasteLabel(s.waste_type))} · ${esc(s.weight_kg)} кг${pickupDetails(s)}</span></button></li>`).join("")}
       </ol>
       <p class="meta route-src">${esc(srcLabel)}. ${esc(t(route.source === "2gis" ? "route.timeHint2gis" : "route.timeHint"))}</p>`;
     panel.classList.remove("hidden");
+    setMapSheet(false);
+    const mobile = window.matchMedia("(max-width: 760px)").matches;
+    if (bounds.isValid()) state.map.fitBounds(bounds, {
+      paddingTopLeft: [32, 32],
+      paddingBottomRight: mobile ? [32, panel.offsetHeight + 64] : [panel.offsetWidth + 48, 32],
+      maxZoom: 16,
+    });
+    panel.querySelectorAll("[data-stop]").forEach(button => button.addEventListener("click", () => {
+      const stop = route.stops[Number(button.dataset.stop)];
+      const point = L.latLng(stop.lat, stop.lon);
+      state.map.setView(point, 17, { animate: false });
+      state.map.panBy(mobile ? [0, panel.offsetHeight / 2] : [panel.offsetWidth / 2, 0], { animate: false });
+      state.routeLayer.eachLayer(layer => {
+        if (layer.getLatLng && layer.getLatLng().equals(point)) layer.openPopup();
+      });
+    }));
     document.getElementById("routeClose").addEventListener("click", clearRoute);
   } catch (err) { if (loadId === state.routeLoadId) toast(err.message, "error"); }
 }
@@ -844,7 +875,7 @@ async function loadRequestsHistory() {
       ? reqs.map((r) => `
           <div class="list-item">
             <span><strong>${esc(wasteLabel(r.waste_type))}</strong> — ${esc(r.weight_kg)} кг
-              <br /><span class="meta">${esc((r.created_at || "").slice(0, 10))}</span></span>
+              <br /><span class="meta">${esc((r.created_at || "").slice(0, 10))}</span>${pickupDetails(r)}</span>
             <span style="display:flex;gap:.5rem;align-items:center">
               <span class="status-chip ${r.status === "collected" || r.status === "verified" ? "ok" : ""}">${esc(statusLabel(r.status))}</span>
               ${r.status === "pending" ? `<button class="btn btn-outline btn-sm" data-cancel="${r.id}">${esc(t("cab.cancel"))}</button>` : ""}
@@ -1369,3 +1400,17 @@ function initReveal() {
     }
   }
 })();
+
+function pickupDetails(item) {
+  return `${item.address ? `<br><span class="pickup-address">${esc(item.address)}</span>` : ""}${item.pickup_note ? `<br><span class="meta pickup-note">${esc(item.pickup_note)}</span>` : ""}`;
+}
+
+function setMapSheet(expanded) {
+  document.getElementById("pane-map").classList.toggle("sheet-collapsed", !expanded);
+  const toggle = document.getElementById("mapSheetToggle");
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.textContent = t(expanded ? "map.hidePanel" : "map.showPanel");
+}
+document.getElementById("mapSheetToggle").addEventListener("click", () => {
+  setMapSheet(document.getElementById("pane-map").classList.contains("sheet-collapsed"));
+});

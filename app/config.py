@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash-lite"
     DGIS_API_KEY: str = ""
+    DGIS_MATRIX_ENABLED: bool = True
+    DGIS_MATRIX_DAILY_REQUESTS: int = 24  # Each request: at most 9 x 9 billed cells.
     # --- Пилотная зона (депо переработчика по умолчанию) ---
     DEPOT_LAT: float = 47.1167  # Атырау
     DEPOT_LON: float = 51.8833

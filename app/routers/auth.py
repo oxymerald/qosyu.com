@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import create_access_token, get_password_hash, verify_password
+from config import settings
 from database import get_db
 from dependencies import get_current_user
 from models import User
@@ -34,9 +35,14 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     return db_user
 
 
-@router.post("/login", response_model=Token)
+async def production_login_limit(request: Request):
+    # Local demo keeps the previously requested unrestricted sign-in.
+    if settings.is_production:
+        await rate_limit("login", limit=20, window_seconds=300)(request)
+
+
+@router.post("/login", response_model=Token, dependencies=[Depends(production_login_limit)])
 async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
-    # Лимит попыток входа снят по требованию: вход без ограничений по частоте.
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     # Единое сообщение об ошибке: не раскрываем, существует ли email
