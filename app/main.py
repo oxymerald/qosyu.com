@@ -22,6 +22,7 @@ from routers import (
     chat,
     clustering,
     marketplace,
+    maps,
     push,
     recycler,
     requests,
@@ -123,6 +124,7 @@ app.include_router(reviews.router)
 app.include_router(push.router)
 app.include_router(admin.router)
 app.include_router(ai.router)
+app.include_router(maps.router)
 
 
 @app.get("/health", tags=["service"])

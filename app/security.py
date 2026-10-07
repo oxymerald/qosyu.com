@@ -92,7 +92,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "default-src 'self'; "
         "script-src 'self' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline' https://unpkg.com; "
-        "img-src 'self' data: https://*.basemaps.cartocdn.com https://unpkg.com; "
+        "img-src 'self' data: blob: https://tile.openstreetmap.org https://unpkg.com; "
         "connect-src 'self' ws: wss:; "
         "font-src 'self'; "
         "object-src 'none'; "

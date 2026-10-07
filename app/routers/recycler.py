@@ -107,6 +107,8 @@ async def zone_route(
     current_user: User = Depends(require_roles(UserRole.RECYCLER, UserRole.ADMIN)),
 ):
     """Оптимальный маршрут объезда точек зоны: порядок, дистанция, ETA, геометрия."""
+    if (start_lat is None) != (start_lon is None):
+        raise HTTPException(status_code=422, detail="Укажите обе координаты начала маршрута")
     zone = await db.get(CollectionZone, zone_id)
     if not zone:
         raise HTTPException(status_code=404, detail="Зона не найдена")
@@ -121,10 +123,11 @@ async def zone_route(
         select(WasteRequest, User.company_name)
         .join(User, WasteRequest.sme_id == User.id)
         .where(WasteRequest.id.in_(zone.request_ids or []))
+        .order_by(WasteRequest.id)
     )
     rows = result.all()
-    if not rows:
-        raise HTTPException(status_code=409, detail="В зоне нет заявок")
+    if not rows or len(rows) != len(set(zone.request_ids or [])):
+        raise HTTPException(status_code=409, detail="Состав зоны неполный; маршрут не построен")
 
     depot = (
         start_lat if start_lat is not None else settings.DEPOT_LAT,
@@ -153,6 +156,9 @@ async def zone_route(
     return {
         "zone_id": zone.id,
         "source": route["source"],
+        "approximate": route["source"] not in ("osrm", "2gis"),
+        "provider_warning": route.get("provider_warning"),
+        "service_minutes_per_stop": 6,
         "start": {"lat": depot[0], "lon": depot[1]},
         "distance_km": round(route["distance_meters"] / 1000, 1),
         "duration_min": round(route["duration_seconds"] / 60),

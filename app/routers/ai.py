@@ -1,10 +1,10 @@
-"""AI-функции платформы на Claude API (Anthropic).
+"""Gemini with read-only map tools; optional legacy Anthropic text assistant.
 
-Работают при заданном ANTHROPIC_API_KEY; без ключа /assistant отвечает 503,
-а /insights отдаёт rule-based аналитику — платформа остаётся полнофункциональной.
+Without credentials the application works and operational insights use rules.
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ from models import (
 )
 from security import rate_limit
 from services.esg import calculate_co2_saved
+from services import ai_tools, gemini
 
 try:
     import anthropic
@@ -45,7 +46,9 @@ def _get_client():
 
 
 def _ai_available() -> bool:
-    return anthropic is not None and bool(settings.ANTHROPIC_API_KEY)
+    if settings.AI_PROVIDER == "gemini":
+        return bool(settings.GEMINI_API_KEY.strip())
+    return settings.AI_PROVIDER == "anthropic" and anthropic is not None and bool(settings.ANTHROPIC_API_KEY)
 
 
 SYSTEM_PROMPT = """Ты — ассистент QOSYU, цифровой платформы первой мили экологической логистики в Казахстане.
@@ -68,14 +71,38 @@ class AssistantMessage(BaseModel):
     content: str = Field(..., min_length=1, max_length=4000)
 
 
+class MapStart(BaseModel):
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lon: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+
 class AssistantIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     history: list[AssistantMessage] = Field(default_factory=list, max_length=10)
+    map_start: MapStart | None = None
+    selected_zone_id: int | None = Field(default=None, gt=0)
+
+
+class MapSelection(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=50)
+
+
+@router.post("/map/{kind}")
+async def map_selection(
+    kind: Literal["requests", "zones"],
+    data: MapSelection,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await ai_tools.map_items(kind, data.ids, db, current_user)
 
 
 @router.get("/status")
 async def ai_status():
-    return {"available": _ai_available(), "model": settings.AI_MODEL if _ai_available() else None}
+    model = settings.GEMINI_MODEL if settings.AI_PROVIDER == "gemini" else settings.AI_MODEL
+    return {"available": _ai_available(), "provider": settings.AI_PROVIDER,
+            "model": model if _ai_available() else None,
+            "map_tools": settings.AI_PROVIDER == "gemini" and _ai_available()}
 
 
 async def _user_context(db: AsyncSession, user: User) -> str:
@@ -145,6 +172,8 @@ async def assistant(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if settings.AI_PROVIDER == "gemini":
+        return await gemini.assistant(data, db, current_user)
     if not _ai_available():
         raise HTTPException(
             status_code=503,
@@ -252,7 +281,7 @@ async def insights(
         recommendations.append("Пока недостаточно данных — создайте несколько заявок для аналитики.")
 
     source = "rules"
-    if _ai_available():
+    if settings.AI_PROVIDER == "anthropic" and _ai_available():
         try:
             client = _get_client()
             response = await client.messages.create(

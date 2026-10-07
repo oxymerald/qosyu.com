@@ -19,6 +19,7 @@ function toast(message, kind = "info") {
   el.className = `toast ${kind === "error" ? "error" : kind === "success" ? "success" : ""}`;
   el.textContent = message;
   root.appendChild(el);
+  while (root.children.length > 3) root.firstElementChild.remove();
   setTimeout(() => el.remove(), 4200);
 }
 
@@ -68,9 +69,35 @@ const state = {
   chatPartnerId: null,
   chatPartnerName: null,
   leafletLoading: null,
+  selectedPoint: null,
+  selectedMarker: null,
+  mapLoadId: 0,
+  routeLoadId: 0,
+  sessionId: 0,
+  requestOffset: 0,
+  currentRouteZoneId: null,
+  mapProvider: null,
+  selectedAddress: null,
 };
 
 function setSession(token, user) {
+  document.getElementById("toastRoot").innerHTML = "";
+  state.sessionId++;
+  state.mapLoadId++;
+  clearRoute();
+  state.selectedMarker?.remove();
+  state.selectedMarker = null;
+  state.selectedPoint = null;
+  state.requestOffset = 0;
+  state.markersLayer?.clearLayers();
+  state.zonesLayer?.clearLayers();
+  if (state.map) state.map.remove();
+  state.map = null;
+  state.markersLayer = state.zonesLayer = state.routeLayer = null;
+  state.selectedAddress = null;
+  assistantHistory.length = 0;
+  assistantReady = false;
+  document.getElementById("assistantLog").innerHTML = "";
   state.token = token;
   state.user = user;
   if (token) localStorage.setItem("qosyu_token", token);
@@ -96,7 +123,12 @@ function loadLeaflet() {
     js.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
     js.crossOrigin = "";
     js.onload = () => resolve();
-    js.onerror = () => reject(new Error("Leaflet failed to load"));
+    js.onerror = () => {
+      state.leafletLoading = null;
+      js.remove();
+      css.remove();
+      reject(new Error(t("map.loadError")));
+    };
     document.body.appendChild(js);
   });
   return state.leafletLoading;
@@ -123,9 +155,11 @@ async function showCabinet() {
   cabinetPage.classList.remove("hidden");
   updateRoleTabs();
   activateTab("map");
-  await initMap();
   renderCabinetSidebar();
-  loadMapData();
+  try {
+    await initMap();
+    await loadMapData();
+  } catch (err) { toast(err.message, "error"); }
   refreshUnreadBadge();
 }
 
@@ -297,7 +331,8 @@ document.getElementById("privacyLink").addEventListener("click", (e) => {
   e.preventDefault();
   openModal(`<h3>${esc(t("footer.privacy"))}</h3><div class="policy-text">
     <p>QOSYU собирает минимально необходимые данные: email, название компании и координаты точек сбора вторсырья.</p>
-    <p>Пароли хранятся только в виде необратимого хэша (bcrypt). Данные не передаются третьим лицам и используются исключительно для организации вывоза вторсырья и формирования ESG-отчётности.</p></div>`);
+    <p>Пароли хранятся в виде хэша (bcrypt). При подключении 2ГИС сервер передаёт ему поисковые адреса, область карты и координаты маршрута. Резервные сервисы карты и маршрутов — OpenStreetMap и OSRM.</p>
+    <p>При отправке вопроса ИИ выбранному провайдеру передаются текст диалога и необходимые для ответа данные доступных вам заявок: номера, координаты, тип сырья, масса и статусы. Пароли и ключи API в диалог не включаются. Не указывайте в вопросах конфиденциальные сведения.</p></div>`);
 });
 document.getElementById("termsLink").addEventListener("click", (e) => {
   e.preventDefault();
@@ -346,47 +381,135 @@ document.getElementById("cabinetTabs").addEventListener("click", (e) => {
 
 async function initMap() {
   if (state.map) return;
+  const session = state.sessionId;
   await loadLeaflet();
+  const mapStatus = await api("/maps/status");
+  if (session !== state.sessionId || !state.user || state.map) return;
   state.map = L.map("cabinetMap").setView([47.1167, 51.8833], 12);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-    maxZoom: 19,
+  state.mapProvider = mapStatus.provider;
+  const addOsm = () => L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19,
   }).addTo(state.map);
+  if (mapStatus.provider === "2gis") {
+    const AuthorizedTiles = L.TileLayer.extend({
+      createTile(coords, done) {
+        const tile = document.createElement("img");
+        const controller = new AbortController();
+        tile._requestController = controller;
+        tile.alt = "";
+        fetch(`/maps/tiles/${coords.z}/${coords.x}/${coords.y}.png`, {
+          headers: { Authorization: `Bearer ${state.token}` }, signal: controller.signal,
+        }).then(async response => {
+          if (!response.ok) throw new Error(t("map.providerFallback"));
+          const blob = await response.blob();
+          if (controller.signal.aborted) return;
+          const url = URL.createObjectURL(blob);
+          tile._blobUrl = url;
+          tile.onload = () => { URL.revokeObjectURL(url); done(null, tile); };
+          tile.onerror = () => { URL.revokeObjectURL(url); done(new Error("Map tile failed"), tile); };
+          tile.src = url;
+        }).catch(err => {
+          if (controller.signal.aborted) return;
+          done(err, tile);
+          if (state.map && state.mapProvider === "2gis") {
+            state.mapProvider = "osm";
+            this.remove();
+            addOsm();
+            toast(t("map.providerFallback"), "error");
+          }
+        });
+        return tile;
+      },
+    });
+    const tiles = new AuthorizedTiles("", { maxZoom: 19,
+      attribution: '&copy; <a href="https://2gis.kz/atyrau">2ГИС</a>' });
+    tiles.on("tileunload", e => {
+      e.tile._requestController?.abort();
+      if (e.tile._blobUrl) URL.revokeObjectURL(e.tile._blobUrl);
+    });
+    tiles.addTo(state.map);
+  } else addOsm();
   state.markersLayer = L.layerGroup().addTo(state.map);
   state.zonesLayer = L.layerGroup().addTo(state.map);
   state.routeLayer = L.layerGroup().addTo(state.map);
+  state.map.on("click", (e) => selectMapPoint(e.latlng));
+}
+
+function selectMapPoint(point) {
+  if (!state.user || !state.map) return;
+  state.selectedPoint = { lat: point.lat, lng: point.lng };
+  state.selectedAddress = null;
+  if (!state.selectedMarker) {
+    state.selectedMarker = L.marker(point, { draggable: true }).addTo(state.map);
+    state.selectedMarker.on("dragend", (e) => selectMapPoint(e.target.getLatLng()));
+  } else state.selectedMarker.setLatLng(point);
+  state.selectedMarker.bindPopup(esc(t(state.user.role === "sme" ? "map.pickup" : "map.start")));
+  updateSelectedPoint();
+  clearRoute();
+}
+
+function updateSelectedPoint() {
+  const label = document.getElementById("selectedPointLabel");
+  if (label) label.textContent = state.selectedPoint
+    ? `${state.selectedAddress ? state.selectedAddress + " · " : ""}${state.selectedPoint.lat.toFixed(5)}, ${state.selectedPoint.lng.toFixed(5)}`
+    : t(state.user?.role === "sme" ? "map.notSelected" : "map.depotHint");
 }
 
 async function loadMapData() {
   if (!state.map || !state.user) return;
-  state.markersLayer.clearLayers();
-  state.zonesLayer.clearLayers();
-  if (state.user.role === "sme") {
-    try {
-      const reqs = await api("/requests/my");
+  const loadId = ++state.mapLoadId;
+  try {
+    if (state.user.role === "sme") {
+      const reqs = [];
+      let page;
+      do {
+        page = await api(`/requests/my?limit=100&offset=${reqs.length}`);
+        if (loadId !== state.mapLoadId) return;
+        reqs.push(...page);
+      } while (page.length === 100);
+      state.markersLayer.clearLayers();
+      state.zonesLayer.clearLayers();
       reqs.forEach((r) => {
-        L.marker([r.latitude, r.longitude], {
-          icon: L.divIcon({ className: "map-dot", iconSize: [14, 14] }),
+        L.circleMarker([r.latitude, r.longitude], {
+          bubblingMouseEvents: false,
+          radius: 7, color: ["collected", "verified"].includes(r.status) ? "#24815d" : "#990011",
+          fillOpacity: 0.8,
         })
-          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} кг`)
+          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} кг<br>${esc(statusLabel(r.status))}`)
           .addTo(state.markersLayer);
       });
-    } catch (_) {}
-  }
-  try {
-    const zones = await api("/clustering/zones/open");
+      return;
+    }
+    const [open, mine] = await Promise.all([
+      api("/clustering/zones/open"),
+      state.user.role === "recycler" ? api("/recycler/zones/my") : Promise.resolve([]),
+    ]);
+    if (loadId !== state.mapLoadId) return;
+    const zones = [...open, ...mine];
+    state.markersLayer.clearLayers();
+    state.zonesLayer.clearLayers();
     zones.forEach((z) => {
       L.circle([z.centroid_lat, z.centroid_lon], {
-        radius: (z.radius_km || 1) * 1000,
-        color: "#990011",
+        bubblingMouseEvents: false,
+        radius: Math.max(z.radius_km * 1000, 60),
+        color: z.status === "open" ? "#990011" : "#24815d",
         weight: 2,
         fillColor: "#FBEEEE",
         fillOpacity: 0.35,
       })
-        .bindPopup(`#${z.id} · ${z.request_count} · ${esc(z.total_weight_kg)} кг`)
+        .bindPopup(() => {
+          const box = document.createElement("div");
+          box.innerHTML = `#${z.id} · ${z.request_count} · ${esc(z.total_weight_kg)} кг<br>${esc(z.status === "open" ? t("cab.openZones") : t("cab.myZones"))}<br>`;
+          const button = document.createElement("button");
+          button.className = "btn btn-outline btn-sm";
+          button.textContent = t("cab.route");
+          button.addEventListener("click", () => showZoneRoute(z.id));
+          box.appendChild(button);
+          return box;
+        })
         .addTo(state.zonesLayer);
     });
-  } catch (_) {}
+  } catch (err) { if (loadId === state.mapLoadId) toast(err.message, "error"); }
 }
 
 /* ================= Боковая панель кабинета ================= */
@@ -411,7 +534,8 @@ function renderCabinetSidebar() {
         </select>
         <label for="reqWeight">${esc(t("cab.weight"))}</label>
         <input class="field" id="reqWeight" type="number" min="1" max="50000" step="0.5" placeholder="15" />
-        <p class="list-item meta" style="display:block">${esc(t("cab.pointHint"))}</p>
+        <p class="meta">${esc(t("map.selectHint"))}</p>
+        <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
         <button class="btn btn-wine" id="createReqBtn">${esc(t("cab.createRequest"))}</button>
       </div>
       <div class="side-block">
@@ -429,6 +553,12 @@ function renderCabinetSidebar() {
   } else if (state.user.role === "recycler") {
     box.innerHTML = `
       <div class="side-block">
+        <h3>${esc(t("map.start"))}</h3>
+        <p class="meta">${esc(t("map.startHint"))}</p>
+        <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
+        <button class="btn btn-outline btn-sm" id="resetStartBtn">${esc(t("map.resetStart"))}</button>
+      </div>
+      <div class="side-block">
         <h3>${esc(t("cab.openZones"))}</h3>
         <div id="sideOpenZones" class="side-stack"></div>
         <button class="btn btn-outline" id="genZonesBtn">${esc(t("cab.genZones"))}</button>
@@ -438,19 +568,66 @@ function renderCabinetSidebar() {
         <div id="sideMyZones" class="side-stack"></div>
       </div>
       <div class="side-block" id="telegramBlock"></div>`;
-    document.getElementById("genZonesBtn").addEventListener("click", async () => {
+    document.getElementById("resetStartBtn").addEventListener("click", () => {
+      state.selectedMarker?.remove();
+      state.selectedMarker = null;
+      state.selectedPoint = null;
+      updateSelectedPoint();
+      clearRoute();
+    });
+    document.getElementById("genZonesBtn").addEventListener("click", async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
       try {
         const res = await api("/clustering/generate-zones", "POST");
         toast(res.message, "success");
         await loadRecyclerSidebar();
         await loadMapData();
       } catch (err) { toast(err.message, "error"); }
+      finally { button.disabled = false; }
     });
     loadRecyclerSidebar();
     renderTelegramBlock();
   } else {
     box.innerHTML = `<div class="side-block"><p class="meta">${esc(t("admin.title"))} → ${esc(t("tab.admin"))}</p></div>`;
   }
+  box.insertAdjacentHTML("afterbegin", `<div class="side-block"><h3>${esc(t("map.searchTitle"))}</h3>
+    <form id="mapSearchForm"><label for="mapSearchInput">${esc(t("map.searchHint"))}</label>
+      <input id="mapSearchInput" class="field" minlength="3" maxlength="250" required placeholder="Атырау, Абая 1" />
+      <button class="btn btn-outline btn-sm" type="submit">${esc(t("map.searchButton"))}</button></form>
+    <div id="mapSearchResults" class="side-stack" aria-live="polite"></div></div>`);
+  document.getElementById("mapSearchForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const button = e.currentTarget.querySelector("button");
+    const results = document.getElementById("mapSearchResults");
+    const session = state.sessionId;
+    button.disabled = true;
+    results.textContent = "…";
+    try {
+      const found = await api(`/maps/search?q=${encodeURIComponent(document.getElementById("mapSearchInput").value.trim())}`);
+      if (session !== state.sessionId) return;
+      results.textContent = found.items.length ? "" : t("map.noAddresses");
+      for (const item of found.items) {
+        const choice = document.createElement("button");
+        choice.className = "btn btn-outline btn-sm";
+        choice.textContent = item.name;
+        choice.onclick = async () => {
+          try {
+            await initMap();
+            if (session !== state.sessionId || !state.map) return;
+            selectMapPoint({ lat: item.lat, lng: item.lon });
+            state.selectedAddress = item.name;
+            updateSelectedPoint();
+            state.map.setView([item.lat, item.lon], 17);
+            state.selectedMarker.openPopup();
+          } catch (err) { if (session === state.sessionId) toast(err.message, "error"); }
+        };
+        results.appendChild(choice);
+      }
+    } catch (err) { if (session === state.sessionId) results.textContent = err.message; }
+    finally { button.disabled = false; }
+  });
+  updateSelectedPoint();
 }
 
 /* ================= Telegram-привязка ================= */
@@ -483,8 +660,12 @@ function renderTelegramBlock() {
 
 async function createRequestFromMap() {
   const weight = parseFloat(document.getElementById("reqWeight").value);
-  if (!weight || weight <= 0) { toast(t("toast.needWeight"), "error"); return; }
-  const center = state.map.getCenter();
+  if (!Number.isFinite(weight) || weight <= 0 || weight > 50000) { toast(t("toast.needWeight"), "error"); return; }
+  if (!state.selectedPoint) { toast(t("map.selectHint"), "error"); return; }
+  const center = { ...state.selectedPoint };
+  const button = document.getElementById("createReqBtn");
+  if (button.disabled) return;
+  button.disabled = true;
   try {
     await api("/requests/create", "POST", {
       waste_type: document.getElementById("reqType").value,
@@ -497,6 +678,7 @@ async function createRequestFromMap() {
     await loadSmeSidebar();
     await loadMapData();
   } catch (err) { toast(err.message, "error"); }
+  finally { button.disabled = false; }
 }
 
 async function loadSmeSidebar() {
@@ -525,18 +707,26 @@ async function loadRecyclerSidebar() {
       ? open.map((z) => `
           <div class="list-item">
             <span>#${z.id}<br /><span class="meta">${z.request_count} · ${esc(z.total_weight_kg)} кг</span></span>
-            <button class="btn btn-outline btn-sm" data-assign="${z.id}">${esc(t("cab.take"))}</button>
+            <span class="zone-buttons">
+              <button class="btn btn-outline btn-sm" data-route="${z.id}">${esc(t("cab.route"))}</button>
+              <button class="btn btn-wine btn-sm" data-assign="${z.id}">${esc(t("cab.take"))}</button>
+            </span>
           </div>`).join("")
       : `<p class="meta">${esc(t("cab.noOpenZones"))}</p>`;
     openBox.querySelectorAll("[data-assign]").forEach((btn) =>
       btn.addEventListener("click", async () => {
+        btn.disabled = true;
         try {
           await api(`/recycler/zones/${btn.dataset.assign}/assign`, "POST");
           toast(t("toast.zoneTaken"), "success");
           await loadRecyclerSidebar();
           await loadMapData();
         } catch (err) { toast(err.message, "error"); }
+        finally { btn.disabled = false; }
       })
+    );
+    openBox.querySelectorAll("[data-route]").forEach((btn) =>
+      btn.addEventListener("click", () => showZoneRoute(btn.dataset.route))
     );
 
     const mine = await api("/recycler/zones/my");
@@ -553,6 +743,7 @@ async function loadRecyclerSidebar() {
       : `<p class="meta">${esc(t("cab.noMyZones"))}</p>`;
     myBox.querySelectorAll("[data-complete]").forEach((btn) =>
       btn.addEventListener("click", async () => {
+        btn.disabled = true;
         try {
           await api(`/recycler/zones/${btn.dataset.complete}/complete`, "POST");
           toast(t("toast.zoneDone"), "success");
@@ -560,6 +751,7 @@ async function loadRecyclerSidebar() {
           await loadRecyclerSidebar();
           await loadMapData();
         } catch (err) { toast(err.message, "error"); }
+        finally { btn.disabled = false; }
       })
     );
     myBox.querySelectorAll("[data-route]").forEach((btn) =>
@@ -571,24 +763,41 @@ async function loadRecyclerSidebar() {
 /* ================= Маршрут ================= */
 
 function clearRoute() {
+  state.routeLoadId++;
+  state.currentRouteZoneId = null;
   if (state.routeLayer) state.routeLayer.clearLayers();
   document.getElementById("routePanel").classList.add("hidden");
 }
 
-async function showZoneRoute(zoneId) {
+async function showZoneRoute(zoneId, startOverride) {
+  const loadId = ++state.routeLoadId;
   try {
-    const route = await api(`/recycler/zones/${zoneId}/route`);
+    const start = startOverride || (state.selectedPoint ? { lat: state.selectedPoint.lat, lon: state.selectedPoint.lng } : null);
+    const query = start
+      ? `?start_lat=${encodeURIComponent(start.lat)}&start_lon=${encodeURIComponent(start.lon)}` : "";
+    const route = await api(`/recycler/zones/${zoneId}/route${query}`);
+    if (loadId !== state.routeLoadId) return;
     activateTab("map");
     await initMap();
     state.routeLayer.clearLayers();
+    state.currentRouteZoneId = Number(zoneId);
 
     if (route.geometry?.length) {
-      L.polyline(route.geometry, { color: "#990011", weight: 4, opacity: 0.85 }).addTo(state.routeLayer);
+      if (route.approximate) {
+        const drawn = new Set();
+        for (let i = 1; i < route.geometry.length; i++) {
+          const pair = [route.geometry[i - 1], route.geometry[i]];
+          const key = pair.map(p => p.join(",")).sort().join(";");
+          if (drawn.has(key)) continue;
+          drawn.add(key);
+          L.polyline(pair, { color: "#990011", weight: 4, opacity: .85, dashArray: "8 8", interactive: false }).addTo(state.routeLayer);
+        }
+      } else L.polyline(route.geometry, { color: "#990011", weight: 4, opacity: .85, interactive: false }).addTo(state.routeLayer);
     }
     // Депо
     L.marker([route.start.lat, route.start.lon], {
       icon: L.divIcon({ className: "route-depot", html: "★", iconSize: [26, 26] }),
-    }).bindPopup("Депо").addTo(state.routeLayer);
+    }).bindPopup(esc(t("map.start"))).addTo(state.routeLayer);
     // Точки по порядку
     route.stops.forEach((s) => {
       L.marker([s.lat, s.lon], {
@@ -600,7 +809,7 @@ async function showZoneRoute(zoneId) {
     const bounds = L.latLngBounds(route.geometry.length ? route.geometry : route.stops.map((s) => [s.lat, s.lon]));
     if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [40, 40] });
 
-    const srcLabel = route.source === "osrm" ? t("route.source.osrm") : t("route.source.heuristic");
+    const srcLabel = route.source === "2gis" ? t("route.source.2gis") : route.source === "osrm" ? t("route.source.osrm") : t("route.source.heuristic");
     const panel = document.getElementById("routePanel");
     panel.innerHTML = `
       <div class="route-head">
@@ -612,13 +821,15 @@ async function showZoneRoute(zoneId) {
         <div><span>${esc(t("route.eta"))}</span><b>${esc(route.duration_min)} ${esc(t("common.min"))}</b></div>
         <div><span>${esc(t("route.stops"))}</span><b>${route.stops.length}</b></div>
       </div>
+      ${route.approximate ? `<p class="route-warning">${esc(t("route.approxWarning"))}</p>` : ""}
+      ${route.provider_warning ? `<p class="route-warning">${esc(t("route.providerFallback"))}</p>` : ""}
       <ol class="route-list">
         ${route.stops.map((s) => `<li><span class="route-num">${s.order}</span> ${esc(s.company || "—")} · ${esc(wasteLabel(s.waste_type))} ${esc(s.weight_kg)} кг</li>`).join("")}
       </ol>
-      <p class="meta route-src">${esc(srcLabel)}</p>`;
+      <p class="meta route-src">${esc(srcLabel)}. ${esc(t(route.source === "2gis" ? "route.timeHint2gis" : "route.timeHint"))}</p>`;
     panel.classList.remove("hidden");
     document.getElementById("routeClose").addEventListener("click", clearRoute);
-  } catch (err) { toast(err.message, "error"); }
+  } catch (err) { if (loadId === state.routeLoadId) toast(err.message, "error"); }
 }
 
 /* ================= История заявок ================= */
@@ -626,7 +837,9 @@ async function showZoneRoute(zoneId) {
 async function loadRequestsHistory() {
   const box = document.getElementById("requestsHistoryList");
   try {
-    const reqs = await api("/requests/my?limit=100");
+    const sessionId = state.sessionId;
+    const reqs = await api(`/requests/my?limit=50&offset=${state.requestOffset}`);
+    if (sessionId !== state.sessionId) return;
     box.innerHTML = reqs.length
       ? reqs.map((r) => `
           <div class="list-item">
@@ -638,13 +851,23 @@ async function loadRequestsHistory() {
             </span>
           </div>`).join("")
       : `<p class="meta">${esc(t("cab.noRequests"))}</p>`;
+    box.insertAdjacentHTML("beforeend", `<div class="history-pagination">
+      <button class="btn btn-outline btn-sm" id="requestsPrev" ${state.requestOffset === 0 ? "disabled" : ""}>${esc(t("common.previous"))}</button>
+      <span>${Math.floor(state.requestOffset / 50) + 1}</span>
+      <button class="btn btn-outline btn-sm" id="requestsNext" ${reqs.length < 50 ? "disabled" : ""}>${esc(t("common.next"))}</button></div>`);
+    document.getElementById("requestsPrev").onclick = () => { state.requestOffset = Math.max(0, state.requestOffset - 50); loadRequestsHistory(); };
+    document.getElementById("requestsNext").onclick = () => { state.requestOffset += 50; loadRequestsHistory(); };
     box.querySelectorAll("[data-cancel]").forEach((btn) =>
       btn.addEventListener("click", async () => {
+        btn.disabled = true;
         try {
           await api(`/requests/${btn.dataset.cancel}`, "DELETE");
           toast(t("toast.requestCancelled"));
-          loadRequestsHistory();
+          await loadRequestsHistory();
+          await loadMapData();
+          if (state.user?.role === "sme") await loadSmeSidebar();
         } catch (err) { toast(err.message, "error"); }
+        finally { btn.disabled = false; }
       })
     );
   } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
@@ -885,19 +1108,82 @@ async function loadMyOrders() {
 
 /* ================= AI-помощник ================= */
 
+async function showAiSelection(action) {
+  const sessionId = state.sessionId;
+  if (action.type === "show_route") {
+    await showZoneRoute(action.zone_id, action.start);
+    return;
+  }
+  const kind = action.type === "show_requests" ? "requests" : "zones";
+  const items = await api(`/ai/map/${kind}`, "POST", { ids: action.ids });
+  if (sessionId !== state.sessionId) return;
+  activateTab("map");
+  await initMap();
+  clearRoute();
+  state.mapLoadId++;
+  state.markersLayer.clearLayers();
+  state.zonesLayer.clearLayers();
+  const points = [];
+  for (const item of items) {
+    const point = kind === "requests" ? [item.latitude, item.longitude] : [item.centroid_lat, item.centroid_lon];
+    points.push(point);
+    const marker = L.circleMarker(point, { radius: 9, color: "#990011", fillOpacity: .8, bubblingMouseEvents: false });
+    const box = document.createElement("div");
+    box.textContent = kind === "requests"
+      ? `#${item.id} · ${wasteLabel(item.waste_type)} · ${item.weight_kg} кг · ${statusLabel(item.status)}`
+      : `#${item.id} · ${item.request_count} · ${item.total_weight_kg} кг`;
+    if (kind === "zones") {
+      const button = document.createElement("button");
+      button.className = "btn btn-outline btn-sm";
+      button.textContent = t("cab.route");
+      button.onclick = () => showZoneRoute(item.id);
+      box.appendChild(document.createElement("br"));
+      box.appendChild(button);
+    }
+    marker.bindPopup(box).addTo(state.markersLayer);
+  }
+  if (points.length) state.map.fitBounds(L.latLngBounds(points), { padding: [45, 45], maxZoom: 15 });
+}
+
+function appendAssistantActions(actions, log) {
+  if (!Array.isArray(actions)) return;
+  const group = document.createElement("div");
+  group.className = "assistant-actions";
+  for (const action of actions.slice(0, 5)) {
+    if (!["show_requests", "show_zones", "show_route"].includes(action.type)) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-outline btn-sm";
+    button.textContent = action.type === "show_route" ? `${t("cab.route")} #${action.zone_id}`
+      : `${t(action.type === "show_requests" ? "assistant.showRequests" : "assistant.showZones")} (${action.ids.length})`;
+    button.onclick = async () => {
+      button.disabled = true;
+      try { await showAiSelection(action); }
+      catch (err) { toast(err.message, "error"); }
+      finally { button.disabled = false; }
+    };
+    group.appendChild(button);
+  }
+  if (group.children.length) log.appendChild(group);
+}
+
 let assistantReady = false;
 async function initAssistant() {
   const log = document.getElementById("assistantLog");
   if (assistantReady) return;
-  assistantReady = true;
+  const sessionId = state.sessionId;
   try {
     const status = await api("/ai/status");
+    if (sessionId !== state.sessionId) return;
+    document.getElementById("assistantInput").disabled = !status.available;
+    document.querySelector("#assistantForm button").disabled = !status.available;
     if (!status.available) {
-      log.innerHTML = `<div class="assistant-msg bot">${esc(t("assistant.unavailable"))}</div>`;
+      log.innerHTML = `<div class="assistant-msg bot">${esc(t("assistant.setupNeeded"))}</div>`;
       document.getElementById("assistantInput").disabled = true;
       return;
     }
-  } catch (_) {}
+  } catch (err) { toast(err.message, "error"); return; }
+  assistantReady = true;
   log.innerHTML = `<div class="assistant-msg bot">${esc(t("assistant.greeting"))}</div>`;
 }
 
@@ -906,7 +1192,11 @@ document.getElementById("assistantForm").addEventListener("submit", async (e) =>
   e.preventDefault();
   const input = document.getElementById("assistantInput");
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || input.disabled) return;
+  const sessionId = state.sessionId;
+  const button = document.querySelector("#assistantForm button");
+  input.disabled = true;
+  button.disabled = true;
   const log = document.getElementById("assistantLog");
   log.insertAdjacentHTML("beforeend", `<div class="assistant-msg user">${esc(text)}</div>`);
   input.value = "";
@@ -917,13 +1207,22 @@ document.getElementById("assistantForm").addEventListener("submit", async (e) =>
   log.appendChild(typing);
   log.scrollTop = log.scrollHeight;
   try {
-    const res = await api("/ai/assistant", "POST", { message: text, history: assistantHistory.slice(-8) });
+    const res = await api("/ai/assistant", "POST", {
+      message: text, history: assistantHistory.slice(-8),
+      map_start: state.selectedPoint ? { lat: state.selectedPoint.lat, lon: state.selectedPoint.lng } : null,
+      selected_zone_id: state.currentRouteZoneId,
+    });
+    if (sessionId !== state.sessionId) return;
     typing.remove();
     log.insertAdjacentHTML("beforeend", `<div class="assistant-msg bot">${esc(res.reply)}</div>`);
+    appendAssistantActions(res.actions, log);
     assistantHistory.push({ role: "user", content: text }, { role: "assistant", content: res.reply });
   } catch (err) {
+    if (sessionId !== state.sessionId) return;
     typing.remove();
     log.insertAdjacentHTML("beforeend", `<div class="assistant-msg bot">${esc(err.message)}</div>`);
+  } finally {
+    if (sessionId === state.sessionId) { input.disabled = false; button.disabled = false; }
   }
   log.scrollTop = log.scrollHeight;
 });

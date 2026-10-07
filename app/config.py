@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # --- AI (Claude) ---
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-opus-4-8"
+    AI_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    DGIS_API_KEY: str = ""
     # --- Пилотная зона (депо переработчика по умолчанию) ---
     DEPOT_LAT: float = 47.1167  # Атырау
     DEPOT_LON: float = 51.8833

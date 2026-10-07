@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -7,7 +7,7 @@ from database import get_db
 from dependencies import get_current_user
 from models import User
 from schemas import LoginIn, PasswordChange, Token, UserCreate, UserOut
-from security import client_ip, rate_limit, rate_limiter
+from security import rate_limit
 
 router = APIRouter()
 
@@ -34,19 +34,9 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     return db_user
 
 
-@router.post(
-    "/login",
-    response_model=Token,
-    dependencies=[Depends(rate_limit("login-ip", limit=20, window_seconds=900))],
-)
-async def login(data: LoginIn, request: Request, db: AsyncSession = Depends(get_db)):
-    # Отдельный, более строгий лимит на конкретную пару IP+email — от перебора пароля
-    if not await rate_limiter.hit(f"login:{client_ip(request)}:{data.email}", 5, 900):
-        raise HTTPException(
-            status_code=429,
-            detail="Слишком много попыток входа. Попробуйте через 15 минут.",
-            headers={"Retry-After": "900"},
-        )
+@router.post("/login", response_model=Token)
+async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
+    # Лимит попыток входа снят по требованию: вход без ограничений по частоте.
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     # Единое сообщение об ошибке: не раскрываем, существует ли email

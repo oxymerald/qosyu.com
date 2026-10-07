@@ -60,7 +60,9 @@ async def cancel_request(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(WasteRequest).where(WasteRequest.id == request_id))
+    result = await db.execute(
+        select(WasteRequest).where(WasteRequest.id == request_id).with_for_update()
+    )
     req = result.scalar_one_or_none()
     if not req or req.sme_id != current_user.id:
         raise HTTPException(status_code=404, detail="Заявка не найдена")

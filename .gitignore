@@ -1,5 +1,9 @@
 # Секреты
 .env
+.env.*
+!.env.example
+backups/
+*.dump
 *.pem
 *.key
 

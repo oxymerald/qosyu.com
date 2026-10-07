@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_USER: qosyu_test
+      POSTGRES_PASSWORD: isolated-local-test-only
+      POSTGRES_DB: qosyu_test
+    volumes:
+      - testdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U qosyu_test -d qosyu_test]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+  backend:
+    build: .
+    volumes:
+      - ./tests:/tests:ro
+    environment:
+      DATABASE_URL: postgresql+asyncpg://qosyu_test:isolated-local-test-only@db:5432/qosyu_test
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: isolated-local-testing-secret-not-for-production
+      OSRM_BASE_URL: ""
+      ANTHROPIC_API_KEY: ""
+      GEMINI_API_KEY: ""
+      DGIS_API_KEY: ""
+      TELEGRAM_BOT_TOKEN: ""
+      QOSYU_ISOLATED_TEST: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  testdata:

@@ -24,11 +24,12 @@ async def generate_zones(
 ):
     result = await db.execute(
         select(WasteRequest).where(WasteRequest.status == RequestStatus.PENDING)
+        .order_by(WasteRequest.id).with_for_update(skip_locked=True)
     )
     pending = result.scalars().all()
-    if len(pending) < 2:
+    if len(pending) < 1:
         raise HTTPException(
-            status_code=409, detail="Недостаточно заявок для кластеризации (нужно минимум 2)"
+            status_code=409, detail="Нет заявок в ожидании — сначала создайте заявку"
         )
     zones = await create_collection_zones(db, pending)
     clustered_ids = {rid for z in zones for rid in z.request_ids}

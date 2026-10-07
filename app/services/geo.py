@@ -25,17 +25,22 @@ def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     lat1, lon1, lat2, lon2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     dlat, dlon = lat2 - lat1, lon2 - lon1
     h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(h))
+    return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(min(1.0, max(0.0, h))))
 
 
 # ---------- Кластеризация ----------
 
-def cluster_requests(requests: list[WasteRequest], eps_deg=0.018, min_samples=2):
-    """Группирует близкие заявки (DBSCAN по координатам). ~0.018° ≈ 2 км."""
+def cluster_requests(requests: list[WasteRequest], eps_km=2.0, min_samples=1):
+    """DBSCAN по расстоянию на сфере; одиночная заявка тоже образует зону.
+
+    eps_km — расстояние между соседями, не максимальный радиус всей зоны.
+    """
     if len(requests) < min_samples:
         return []
-    coords = np.array([[r.latitude, r.longitude] for r in requests])
-    clustering = DBSCAN(eps=eps_deg, min_samples=min_samples).fit(coords)
+    coords = np.radians([[r.latitude, r.longitude] for r in requests])
+    clustering = DBSCAN(
+        eps=eps_km / EARTH_RADIUS_KM, min_samples=min_samples, metric="haversine"
+    ).fit(coords)
     clusters: dict[int, list[WasteRequest]] = {}
     for idx, label in enumerate(clustering.labels_):
         if label == -1:
@@ -52,7 +57,7 @@ async def create_collection_zones(db: AsyncSession, requests: list[WasteRequest]
         zone = CollectionZone(
             centroid_lat=lat,
             centroid_lon=lon,
-            radius_km=2.0,
+            radius_km=max(haversine_km((lat, lon), (r.latitude, r.longitude)) for r in group),
             total_weight_kg=sum(r.weight_kg for r in group),
             request_ids=[r.id for r in group],
             status=ZoneStatus.OPEN,
@@ -60,9 +65,8 @@ async def create_collection_zones(db: AsyncSession, requests: list[WasteRequest]
         )
         db.add(zone)
         zones.append(zone)
-    await db.commit()
-    for zone in zones:
-        await db.refresh(zone)
+    # Зоны и статусы заявок сохраняются одной транзакцией у вызывающего кода.
+    await db.flush()
     return zones
 
 
@@ -149,24 +153,55 @@ async def osrm_trip(
         if resp.status_code != 200:
             return None
         data = resp.json()
-        if data.get("code") != "Ok" or not data.get("trips"):
+        if not isinstance(data, dict) or data.get("code") != "Ok":
+            return None
+        trips, points = data.get("trips"), data.get("waypoints")
+        if not isinstance(trips, list) or len(trips) != 1:
+            return None
+        if not isinstance(points, list) or len(points) != len(waypoints):
+            return None
+        if any(not isinstance(wp, dict) or wp.get("trips_index") != 0 for wp in points):
+            return None
+        indices = [wp.get("waypoint_index") for wp in points]
+        if any(type(i) is not int for i in indices):
+            return None
+        if sorted(indices) != list(range(len(waypoints))) or indices[0] != 0:
             return None
         trip = data["trips"][0]
+        if not isinstance(trip, dict):
+            return None
+        distance, duration = trip.get("distance"), trip.get("duration")
+        if any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in (distance, duration)):
+            return None
+        shape = trip.get("geometry")
+        if not isinstance(shape, dict) or shape.get("type") != "LineString":
+            return None
+        coordinates = shape.get("coordinates")
+        if not isinstance(coordinates, list) or len(coordinates) < 2:
+            return None
+        for point in coordinates:
+            if not isinstance(point, list) or len(point) != 2:
+                return None
+            lon, lat = point
+            if any(type(v) not in (int, float) or not math.isfinite(v) for v in point):
+                return None
+            if not (-180 <= lon <= 180 and -90 <= lat <= 90):
+                return None
         # waypoints[k].waypoint_index — позиция k-й входной точки в объезде.
         # Индекс 0 — депо; для остановок вычитаем 1 и сортируем по позиции.
         stop_positions = [
             (wp.get("waypoint_index", 0), idx - 1)
-            for idx, wp in enumerate(data.get("waypoints", []))
+            for idx, wp in enumerate(points)
             if idx > 0
         ]
         order = [stop_idx for _, stop_idx in sorted(stop_positions)]
         # GeoJSON отдаёт [lon, lat] — переворачиваем для Leaflet
-        geometry = [[lat, lon] for lon, lat in trip.get("geometry", {}).get("coordinates", [])]
+        geometry = [[lat, lon] for lon, lat in coordinates]
         return {
             "source": "osrm",
             "waypoint_order": order,
-            "distance_meters": round(trip.get("distance", 0)),
-            "duration_seconds": round(trip.get("duration", 0) + STOP_SERVICE_MIN * 60 * len(stops)),
+            "distance_meters": round(distance),
+            "duration_seconds": round(duration + STOP_SERVICE_MIN * 60 * len(stops)),
             "geometry": geometry,
         }
     except (httpx.HTTPError, ValueError, KeyError):
@@ -174,12 +209,24 @@ async def osrm_trip(
 
 
 async def compute_route(
-    depot: tuple[float, float], stops: list[tuple[float, float]], osrm_url: str
+    depot: tuple[float, float], stops: list[tuple[float, float]], osrm_url: str, *, use_dgis=True
 ) -> dict:
-    """OSRM, а при его недоступности — локальная эвристика. Всегда даёт маршрут."""
+    """2ГИС при наличии ключа, затем OSRM, затем схема прямых отрезков."""
+    from config import settings
+    from fastapi import HTTPException
+    warning = None
+    if use_dgis and settings.DGIS_API_KEY and stops:
+        from services.dgis import road_route
+        order = _two_opt(depot, stops, _nearest_neighbor_order(depot, stops))
+        try:
+            return await road_route(depot, stops, order)
+        except HTTPException:
+            warning = "2gis_unavailable"
     route = await osrm_trip(depot, stops, osrm_url)
     if route is None:
         route = build_local_route(depot, stops)
+    if warning:
+        route["provider_warning"] = warning
     return route
 
 
@@ -191,7 +238,8 @@ async def optimize_route(
 
     depot = (settings.DEPOT_LAT, settings.DEPOT_LON)
     stops = [(r.latitude, r.longitude) for r in requests]
-    route = await compute_route(depot, stops, osrm_url)
+    # Background work must not consume the demo's 2GIS quota.
+    route = await compute_route(depot, stops, osrm_url, use_dgis=False)
     route["request_order"] = [requests[i].id for i in route["waypoint_order"]]
     zone.optimized_route = route
     return zone
