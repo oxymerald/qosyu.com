@@ -629,7 +629,10 @@ button:disabled { cursor: wait; opacity: .55; }
   .main-nav a { padding: 0.6rem 0; border-bottom: 1px solid rgba(153, 0, 17, 0.08); }
   .header-inner { flex-wrap: wrap; position: relative; }
   .admin-charts { grid-template-columns: 1fr; }
-  .route-panel { position: static; width: 100%; max-height: 40vh; margin: 0.5rem; }
+  .route-panel {
+    position: absolute; top: auto; bottom: 8px; left: 8px; right: 8px;
+    width: auto; max-height: 45%; margin: 0;
+  }
   .cards-3, .pricing-grid { grid-template-columns: 1fr; }
   .cards-4 { grid-template-columns: 1fr; }
   .team-grid { grid-template-columns: repeat(2, 1fr); }
