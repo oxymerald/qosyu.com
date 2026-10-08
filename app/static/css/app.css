@@ -360,7 +360,7 @@ a { color: var(--wine); text-decoration: none; }
 .roadmap-line { flex: none; width: 44px; height: 2px; background: var(--wine); margin-top: 23px; opacity: 0.45; }
 
 /* Команда */
-.team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2rem; max-width: 1020px; margin: 0 auto; }
+.team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; max-width: 1020px; margin: 0 auto; }
 .team-card {
   background: var(--white); border-radius: var(--radius); padding: 1.8rem 1.2rem;
   text-align: center; box-shadow: var(--shadow);
