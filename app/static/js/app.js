@@ -540,6 +540,7 @@ function renderCabinetSidebar() {
         <input class="field" id="reqWeight" type="number" min="1" max="50000" step="0.5" placeholder="15" />
         <p class="meta">${esc(t("map.selectHint"))}</p>
         <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
+        <button class="btn btn-outline btn-sm" id="locateMapBtn" type="button">${esc(t("map.locate"))}</button>
         <label for="reqAddress">${esc(t("cab.address"))}</label>
         <input class="field" id="reqAddress" maxlength="300" value="${esc(state.selectedAddress || "")}" />
         <label for="reqPickupNote">${esc(t("cab.pickupNote"))}</label>
@@ -564,6 +565,7 @@ function renderCabinetSidebar() {
         <h3>${esc(t("map.start"))}</h3>
         <p class="meta">${esc(t("map.startHint"))}</p>
         <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
+        <button class="btn btn-outline btn-sm" id="locateMapBtn" type="button">${esc(t("map.locate"))}</button>
         <button class="btn btn-outline btn-sm" id="resetStartBtn">${esc(t("map.resetStart"))}</button>
       </div>
       <div class="side-block">
@@ -637,7 +639,39 @@ function renderCabinetSidebar() {
     } catch (err) { if (session === state.sessionId) results.textContent = err.message; }
     finally { button.disabled = false; }
   });
+  document.getElementById("locateMapBtn")?.addEventListener("click", useCurrentLocation);
   updateSelectedPoint();
+}
+
+function useCurrentLocation() {
+  if (!navigator.geolocation) {
+    toast(t("map.locateUnsupported"), "error");
+    return;
+  }
+  const button = document.getElementById("locateMapBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("map.locating");
+  }
+  navigator.geolocation.getCurrentPosition(
+    async ({ coords }) => {
+      try {
+        await initMap();
+        selectMapPoint({ lat: coords.latitude, lng: coords.longitude });
+        state.selectedAddress = null;
+        updateSelectedPoint();
+        state.map.setView([coords.latitude, coords.longitude], 16, { animate: true });
+        state.selectedMarker.openPopup();
+      } finally {
+        if (button) { button.disabled = false; button.textContent = t("map.locate"); }
+      }
+    },
+    () => {
+      toast(t("map.locateError"), "error");
+      if (button) { button.disabled = false; button.textContent = t("map.locate"); }
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+  );
 }
 
 /* ================= Telegram-привязка ================= */
@@ -834,6 +868,7 @@ async function showZoneRoute(zoneId, startOverride) {
         <div><span>${esc(t("route.eta"))}</span><b>${esc(route.duration_min)} ${esc(t("common.min"))}</b></div>
         <div><span>${esc(t("route.stops"))}</span><b>${route.stops.length}</b></div>
       </div>
+      <div class="route-load"><span>${esc(t("route.totalWeight"))}</span><strong>${esc(route.total_weight_kg)} кг</strong></div>
       ${route.approximate ? `<p class="route-warning">${esc(t("route.approxWarning"))}</p>` : ""}
       ${route.provider_warning ? `<p class="route-warning">${esc(t("route.providerFallback"))}</p>` : ""}
       ${route.order_source === "2gis_matrix" ? `<p class="route-note">${esc(t("public.orderRoad"))}</p>` : route.source === "2gis" && route.order_source === "geographic" ? `<p class="route-warning">${esc(t("public.orderGeo"))}</p>` : ""}

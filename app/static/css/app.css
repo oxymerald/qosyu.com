@@ -560,6 +560,8 @@ a { color: var(--wine); text-decoration: none; }
 .route-metrics div { flex: 1; background: var(--blush); border-radius: 9px; padding: 0.5rem; text-align: center; }
 .route-metrics span { display: block; font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .route-metrics b { font-family: var(--serif); color: var(--wine-dark); font-size: 1.05rem; }
+.route-load { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin: .25rem 0 .75rem; padding: .55rem .7rem; border: 1px solid #eceef1; border-radius: 9px; color: var(--muted); font-size: .8rem; }
+.route-load strong { color: var(--ink); font-size: .9rem; }
 .route-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
 .route-list li { font-size: 0.85rem; color: var(--ink); display: flex; gap: 0.5rem; align-items: center; }
 .route-num {
