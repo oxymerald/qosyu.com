@@ -1,0 +1,59 @@
+# One web service serves the UI, API, and WebSocket chat from one HTTPS origin.
+# Supabase provides PostgreSQL + PostGIS; no Render database is provisioned.
+services:
+  - type: web
+    name: qosyu
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /ready
+    autoDeployTrigger: "off"
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SCHEMA
+        value: qosyu
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOL_SIZE
+        value: "2"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: qosyu-cache
+          property: connectionString
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: DGIS_API_KEY
+        sync: false
+      - key: DGIS_MATRIX_ENABLED
+        value: "true"
+      - key: DGIS_MATRIX_DAILY_REQUESTS
+        value: "24"
+      - key: OSRM_BASE_URL
+        value: https://router.project-osrm.org
+      - key: DEPOT_LAT
+        value: "47.1167"
+      - key: DEPOT_LON
+        value: "51.8833"
+  - type: keyvalue
+    name: qosyu-cache
+    plan: free
+    region: singapore
+    ipAllowList: []
+    maxmemoryPolicy: noeviction

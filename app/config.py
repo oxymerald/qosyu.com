@@ -1,6 +1,7 @@
 import secrets
 import warnings
 
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -11,6 +12,11 @@ class Settings(BaseSettings):
     # --- Хранилища ---
     DATABASE_URL: str = "postgresql+asyncpg://qosyu:qosyu@localhost:5432/qosyu"
     REDIS_URL: str = "redis://localhost:6379/0"
+    DATABASE_SCHEMA: str = Field(default="public", pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    DATABASE_SSL: bool = False
+    DATABASE_SSL_CA_FILE: str = ""
+    DATABASE_POOL_SIZE: int = Field(default=5, ge=1, le=20)
+    DATABASE_MAX_OVERFLOW: int = Field(default=5, ge=0, le=20)
 
     # --- Безопасность ---
     SECRET_KEY: str = ""

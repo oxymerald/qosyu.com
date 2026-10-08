@@ -20,6 +20,7 @@ services:
       - ./tests:/tests:ro
     environment:
       DATABASE_URL: postgresql+asyncpg://qosyu_test:isolated-local-test-only@db:5432/qosyu_test
+      DATABASE_SCHEMA: qosyu_test
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: isolated-local-testing-secret-not-for-production
       OSRM_BASE_URL: ""

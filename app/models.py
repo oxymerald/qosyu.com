@@ -1,11 +1,12 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Boolean, JSON, Text, BigInteger
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Boolean, JSON, Text, BigInteger, MetaData
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
 from sqlalchemy.orm import relationship
 import enum
+from config import settings
 
-Base = declarative_base()
+Base = declarative_base(metadata=MetaData(schema=settings.DATABASE_SCHEMA))
 
 class UserRole(str, enum.Enum):
     SME = "sme"

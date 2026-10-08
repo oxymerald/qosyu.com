@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import select
+from sqlalchemy import select, text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from auth import get_password_hash
@@ -62,8 +62,18 @@ async def _bootstrap_admin():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
+        # DATABASE_SCHEMA is a validated identifier. A private schema keeps the
+        # application tables separate from Supabase's public Data API.
+        await conn.execute(text("SELECT pg_advisory_xact_lock(71609521)"))
+        await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{settings.DATABASE_SCHEMA}"'))
         await conn.run_sync(Base.metadata.create_all)
         await upgrade_schema(conn)
+        if settings.DATABASE_SCHEMA != "public":
+            await conn.execute(text(f'REVOKE ALL ON SCHEMA "{settings.DATABASE_SCHEMA}" FROM PUBLIC'))
+            for table in Base.metadata.sorted_tables:
+                await conn.execute(text(
+                    f'ALTER TABLE "{settings.DATABASE_SCHEMA}"."{table.name}" ENABLE ROW LEVEL SECURITY'
+                ))
     await rate_limiter.init()
     await _bootstrap_admin()
 
@@ -131,6 +141,17 @@ app.include_router(maps.router)
 
 @app.get("/health", tags=["service"])
 async def health():
+    return {"status": "ok"}
+
+
+@app.get("/ready", tags=["service"])
+async def ready():
+    try:
+        async with asyncio.timeout(5):
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
     return {"status": "ok"}
 
 

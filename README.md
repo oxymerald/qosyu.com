@@ -254,9 +254,10 @@ qosyu.com/
 
 ## Команда
 
+Публикация в интернете: [Render + Supabase](DEPLOY.md).
+
 - Ахметжанов Айсултан — CEO
 - Галымжанулы Бекарыс — CTO
-- Жарасова Гульжанат — Product Designer
-- Юсупова Асылназ — Business Development
+- Жалел Данияр — CTO
 
 *with love, QOSYU team*

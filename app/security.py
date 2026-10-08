@@ -25,7 +25,7 @@ class RateLimiter:
         self._local: dict[str, tuple[int, float]] = {}
 
     async def init(self):
-        if aioredis is None:
+        if aioredis is None or not settings.REDIS_URL:
             return
         try:
             self._redis = aioredis.from_url(
