@@ -48,7 +48,9 @@ Key Value. Порт приложение получает из `PORT`. Если 
 
 ### Проверка сертификата Supabase
 
-TLS проверяет сертификат и имя сервера. Если в логах есть ошибка доверия
+TLS проверяет сертификат и имя сервера. Публичный CA-сертификат из Supabase
+уже включён в `app/certs/supabase-ca.crt`, путь задан в `render.yaml`.
+Если Supabase сменит сертификат или в логах появится ошибка доверия
 сертификату, скачайте CA certificate в настройках базы своего Supabase-проекта,
 добавьте его в Render как **Secret File** с именем `supabase-ca.crt` и задайте
 `DATABASE_SSL_CA_FILE=/etc/secrets/supabase-ca.crt`. Затем повторите deploy.

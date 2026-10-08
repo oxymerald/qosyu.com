@@ -18,6 +18,8 @@ services:
         value: qosyu
       - key: DATABASE_SSL
         value: "true"
+      - key: DATABASE_SSL_CA_FILE
+        value: /app/certs/supabase-ca.crt
       - key: DATABASE_POOL_SIZE
         value: "2"
       - key: DATABASE_MAX_OVERFLOW
