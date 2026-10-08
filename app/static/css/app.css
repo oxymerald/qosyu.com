@@ -1,3 +1,19 @@
+/* Local variable fonts; licenses are shipped in /static/fonts/. */
+@font-face {
+  font-family: "Golos Text";
+  src: url("/static/fonts/golos-text-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Manrope";
+  src: url("/static/fonts/manrope-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
 /* ============ QOSYU брендбук ============ */
 :root {
   --wine: #990011;
@@ -10,8 +26,9 @@
   --white: #FFFFFF;
   --radius: 14px;
   --shadow: 0 10px 30px -18px rgba(110, 0, 12, 0.35);
-  --serif: Cambria, "PT Serif", Georgia, "Times New Roman", serif;
-  --sans: Calibri, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --serif: var(--sans);
+  --brand-font: "Manrope", "Golos Text", sans-serif;
+  --sans: "Golos Text", "Segoe UI", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -553,7 +570,7 @@ a { color: var(--wine); text-decoration: none; }
 .route-src { margin-top: 0.6rem; text-align: right; }
 
 .tg-code {
-  background: var(--ink); color: var(--cream); font-family: monospace;
+  background: var(--ink); color: var(--cream); font-family: var(--sans); font-variant-numeric: tabular-nums;
   padding: 0.7rem 1rem; border-radius: 9px; margin: 0.6rem 0; font-size: 1rem;
   user-select: all; text-align: center;
 }
@@ -654,7 +671,7 @@ button:disabled { cursor: wait; opacity: .55; }
 }
 
 /* Map workspace: restrained surfaces, stable map area, accessible stop cards. */
-.landing-refresh { --sans: "Segoe UI", Arial, sans-serif; background: #fff; }
+.landing-refresh { background: #fff; }
 .landing-refresh h1, .landing-refresh h2, .landing-refresh h3 { font-family: var(--sans); letter-spacing: -.035em; }
 .landing-refresh .section { padding-top: 72px; padding-bottom: 72px; }
 .landing-refresh .section-title { color: #282b34; font-size: clamp(26px, 3vw, 36px); }
@@ -676,7 +693,7 @@ button:disabled { cursor: wait; opacity: .55; }
 .scheme-place span { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 10px; background: #f8edf0; color: #990011; font-weight: 700; font-size: 14px; }
 .scheme-place p { font-size: 14px; font-weight: 600; color: #444b58; }
 .scheme-finish { margin-left: 32px; }
-.scheme-finish span { background: #990011; color: white; }
+.scheme-symbol { width: 36px; height: 36px; object-fit: contain; flex: none; }
 .pilot-section { text-align: center; }
 .pilot-section .note-plate { max-width: 760px; margin: 24px auto; color: #69707c; background: #f7f8fa; border: 0; }
 .landing-refresh .final-band h2 { color: white; }
@@ -686,7 +703,7 @@ button:disabled { cursor: wait; opacity: .55; }
   .landing-refresh .section { padding-top: 44px; padding-bottom: 44px; }
 }
 .map-sheet-toggle { display: none; }
-.workspace { --cream: #f4f5f7; --blush: #f8f1f3; --sans: "Segoe UI", Arial, sans-serif; font-size: 15px; }
+.workspace { --cream: #f4f5f7; --blush: #f8f1f3; font-size: 15px; }
 .workspace .site-header { position: relative; height: 64px; box-shadow: none; border-bottom: 1px solid #e8e9ed; }
 .workspace .header-inner { max-width: none; height: 100%; padding: 0 24px; flex-wrap: nowrap; }
 .workspace .header-right { margin-left: auto; }
@@ -746,4 +763,21 @@ button:disabled { cursor: wait; opacity: .55; }
   .workspace .route-panel { top: auto; bottom: 52px; left: 8px; right: 8px; width: auto; max-height: 43%; padding: 14px; }
   .workspace .route-metrics { margin-bottom: 5px; }
   .workspace .route-note { font-size: 11px; }
+}
+
+/* Keep form controls, map popups and chart labels in the interface family. */
+button, input, select, textarea, .workspace .leaflet-container, .leaflet-popup-content,
+.leaflet-container .leaflet-control-attribution, svg text { font-family: var(--sans); }
+.brand-mark, .brand-text { font-family: var(--brand-font); font-weight: 800; }
+.brand-text { font-size: 1.4rem; letter-spacing: .025em; line-height: 1.1; }
+.brand-wordmark { display: block; width: 172px; height: 57px; object-fit: contain; }
+.product-eyebrow, .scheme-finish span { font-family: var(--brand-font); }
+@media (max-width: 760px) {
+  .brand-wordmark { width: 132px; height: 44px; }
+  .header-inner { gap: 12px; }
+  .header-right { width: 100%; flex-wrap: wrap; gap: 10px; }
+  .lang-switch { flex: none; }
+  .header-actions { flex: 1; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .header-user { width: 100%; text-align: right; overflow-wrap: anywhere; }
+  .header-actions .btn { white-space: normal; text-align: center; }
 }
