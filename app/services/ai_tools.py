@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import or_, select
 
-from models import CollectionZone, RequestStatus, UserRole, WasteRequest, WasteType, ZoneStatus
+from models import CollectionEvent, CollectionZone, RequestStatus, UserRole, WasteRequest, WasteType, ZoneStatus
 
 
 class RequestFilter(BaseModel):
@@ -14,7 +14,7 @@ class RequestFilter(BaseModel):
 
 class ZoneFilter(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scope: str = Field(default="open", pattern="^(open|mine)$")
+    scope: str = Field(default="open", pattern="^(open|mine|completed)$")
 
 
 class RouteFilter(BaseModel):
@@ -29,8 +29,8 @@ def declarations(role):
                   "status": {"type": "STRING", "enum": [s.value for s in RequestStatus]}}}}]
     if role in (UserRole.RECYCLER, UserRole.ADMIN):
         tools += [
-            {"name": "show_zones", "description": "Найти открытые зоны (open) или зоны в работе пользователя (mine), до 50. Добавить кнопку на карту.",
-             "parameters": {"type": "OBJECT", "properties": {"scope": {"type": "STRING", "enum": ["open", "mine"]}}}},
+            {"name": "show_zones", "description": "Зоны: открытые (open), в работе пользователя (mine) или история завершённых вывозов (completed). История содержит до 50 зон, доступных пользователю, и данные о выполнении.",
+             "parameters": {"type": "OBJECT", "properties": {"scope": {"type": "STRING", "enum": ["open", "mine", "completed"]}}}},
             {"name": "preview_route", "description": "Рассчитать объезд зоны и добавить кнопку просмотра. Для начала используется выбранная на карте база или база по умолчанию. Зона не назначается.",
              "parameters": {"type": "OBJECT", "properties": {"zone_id": {"type": "INTEGER"}}, "required": ["zone_id"]}},
         ]
@@ -107,12 +107,25 @@ async def execute(name, args, db, user, map_start=None):
             query = visible_zones(user)
             if filters.scope == "open":
                 query = query.where(CollectionZone.status == ZoneStatus.OPEN)
+            elif filters.scope == "completed":
+                query = query.where(CollectionZone.status == ZoneStatus.COMPLETED)
             else:
                 query = query.where(CollectionZone.recycler_id == user.id,
                                     CollectionZone.status.in_([ZoneStatus.ASSIGNED, ZoneStatus.IN_PROGRESS]))
             items = (await db.execute(query.order_by(CollectionZone.id.desc()).limit(51))).scalars().all()
             selected = items[:50]
-            return {"items": [zone_data(z) for z in selected], "truncated": len(items) > 50}, (
+            rows = [zone_data(z) for z in selected]
+            if filters.scope == "completed" and selected:
+                events = (await db.execute(select(CollectionEvent).where(
+                    CollectionEvent.zone_id.in_([z.id for z in selected])
+                ).order_by(CollectionEvent.id))).scalars().all()
+                by_zone = {event.zone_id: event for event in events}
+                for row in rows:
+                    event = by_zone.get(row["id"])
+                    if event is not None:
+                        row.update(completed_at=event.end_time.isoformat() if event.end_time else None,
+                                   actual_weight_kg=event.actual_weight_kg, co2_saved_kg=event.co2_saved_kg)
+            return {"items": rows, "truncated": len(items) > 50}, (
                 {"type": "show_zones", "ids": [z.id for z in selected]} if selected else None)
         if name == "preview_route":
             if user.role not in (UserRole.RECYCLER, UserRole.ADMIN):

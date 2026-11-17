@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from config import settings
-from models import CollectionZone, RequestStatus, User, UserRole, WasteRequest, WasteType, ZoneStatus
+from models import CollectionEvent, CollectionZone, RequestStatus, User, UserRole, WasteRequest, WasteType, ZoneStatus
 from routers.ai import AssistantIn, ai_status
 from services import ai_tools, gemini
 
@@ -146,7 +146,18 @@ class ToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                     result = await gemini.assistant(AssistantIn(message="Покажи мои заявки на картон"), db, owner)
                 self.assertEqual(set(result["actions"][0]["ids"]), {requests[0].id, requests[2].id})
                 self.assertNotIn(requests[1].id, result["actions"][0]["ids"])
-                self.assertEqual((await db.execute(select(CollectionZone.status).where(CollectionZone.id == zones[1].id))).scalar(), ZoneStatus.ASSIGNED)
+                for zone in zones:
+                    zone.status = ZoneStatus.COMPLETED
+                    db.add(CollectionEvent(zone_id=zone.id, recycler_id=zone.recycler_id,
+                                           actual_weight_kg=9, co2_saved_kg=4.5))
+                await db.flush()
+                history, action = await ai_tools.execute("show_zones", {"scope": "completed"}, db, recycler)
+                self.assertEqual(action["ids"], [zones[1].id])
+                self.assertEqual(history["items"][0]["actual_weight_kg"], 9)
+                self.assertEqual(history["items"][0]["co2_saved_kg"], 4.5)
+                active, _ = await ai_tools.execute("show_zones", {"scope": "mine"}, db, recycler)
+                self.assertEqual(active["items"], [])
+                self.assertEqual((await db.execute(select(CollectionZone.status).where(CollectionZone.id == zones[1].id))).scalar(), ZoneStatus.COMPLETED)
             finally:
                 await db.rollback()  # No test rows remain.
         await engine.dispose()
