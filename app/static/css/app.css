@@ -381,6 +381,14 @@ a { color: var(--wine); text-decoration: none; }
 .footer-links { display: flex; justify-content: center; gap: 1.4rem; margin-bottom: 0.7rem; }
 .footer-links a { color: var(--muted); }
 .footer-links a:hover { color: var(--wine); }
+.footer-contacts { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem 1.4rem; margin-bottom: .7rem; }
+.footer-contacts a { color: var(--muted); }
+.footer-contacts a:hover { color: var(--wine); }
+.pilot-section .public-contacts { margin-top: 1.5rem; }
+.demo-options { display: grid; gap: .65rem; margin-bottom: 1rem; }
+.pilot-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
+.recycler-filter-range { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+.legal-page .policy-text { max-height: none; overflow: visible; }
 
 /* ============ Кабинет ============ */
 #cabinetPage { min-height: calc(100vh - 62px); display: flex; flex-direction: column; background: var(--cream); }

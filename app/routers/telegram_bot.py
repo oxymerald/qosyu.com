@@ -35,7 +35,7 @@ from auth import get_password_hash
 from config import settings
 from database import async_session_maker
 from models import RequestStatus, User, UserRole, WasteRequest, WasteType
-from services.esg import calculate_co2_saved
+from services.esg import CO2E_FORMULA_RU, calculate_co2_saved, collected_weights_query
 
 logger = logging.getLogger("qosyu.bot")
 
@@ -278,17 +278,17 @@ async def esg_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     async with async_session_maker() as db:
         result = await db.execute(
-            select(func.coalesce(func.sum(WasteRequest.weight_kg), 0.0)).where(
+            collected_weights_query().where(
                 WasteRequest.sme_id == user.id,
                 WasteRequest.status.in_([RequestStatus.COLLECTED, RequestStatus.VERIFIED]),
             )
         )
-        total = float(result.scalar() or 0.0)
-    co2 = calculate_co2_saved(total)
+        total, cardboard_kg = result.one()
+    co2 = calculate_co2_saved(cardboard_kg)
     await query.edit_message_text(
         "🌱 Ваш ESG-отчёт\n\n"
         f"♻️ Передано на переработку: {round(total, 1)} кг\n"
-        f"🌍 CO₂ сэкономлено: {round(co2, 1)} кг\n"
+        f"🌍 {co2} кг CO₂-экв.\n{CO2E_FORMULA_RU}\n"
         f"🌳 Эквивалент деревьев: {round(co2 / 22.0, 1)}\n\n"
         "Полная отчётность доступна в личном кабинете на сайте.",
         reply_markup=main_keyboard(),

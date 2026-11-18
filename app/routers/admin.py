@@ -16,7 +16,7 @@ from models import (
     WasteRequest,
     ZoneStatus,
 )
-from services.esg import calculate_co2_saved
+from services.esg import calculate_co2_saved, collected_weights_query
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -46,16 +46,9 @@ async def platform_stats(db: AsyncSession = Depends(get_db)):
             )
         ).all()
     )
-    collected_weight = float(
-        (
-            await db.execute(
-                select(func.coalesce(func.sum(WasteRequest.weight_kg), 0.0)).where(
-                    WasteRequest.status.in_([RequestStatus.COLLECTED, RequestStatus.VERIFIED])
-                )
-            )
-        ).scalar()
-        or 0.0
-    )
+    collected_weight, cardboard_kg = (await db.execute(collected_weights_query().where(
+        WasteRequest.status.in_([RequestStatus.COLLECTED, RequestStatus.VERIFIED])
+    ))).one()
     orders_count = (
         await db.execute(select(func.count(MarketplaceOrder.id)))
     ).scalar() or 0
@@ -111,7 +104,7 @@ async def platform_stats(db: AsyncSession = Depends(get_db)):
         },
         "esg": {
             "collected_kg": round(collected_weight, 1),
-            "co2_saved_kg": round(calculate_co2_saved(collected_weight), 1),
+            "co2_saved_kg": calculate_co2_saved(cardboard_kg),
         },
         "orders_total": orders_count,
         "requests_series_14d": series,

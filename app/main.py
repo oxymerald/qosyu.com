@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -29,7 +29,9 @@ from routers import (
     requests,
     reviews,
     telegram_bot,
+    public,
 )
+from public_pages import frontend, legal
 from security import (
     BodySizeLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -66,8 +68,8 @@ async def lifespan(app: FastAPI):
         # application tables separate from Supabase's public Data API.
         await conn.execute(text("SELECT pg_advisory_xact_lock(71609521)"))
         await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{settings.DATABASE_SCHEMA}"'))
-        await conn.run_sync(Base.metadata.create_all)
-        await upgrade_schema(conn)
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        await upgrade_schema(conn, settings.DATABASE_SCHEMA)
         if settings.DATABASE_SCHEMA != "public":
             await conn.execute(text(f'REVOKE ALL ON SCHEMA "{settings.DATABASE_SCHEMA}" FROM PUBLIC'))
             for table in Base.metadata.sorted_tables:
@@ -137,6 +139,7 @@ app.include_router(push.router)
 app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(maps.router)
+app.include_router(public.router)
 
 
 @app.get("/health", tags=["service"])
@@ -170,5 +173,15 @@ app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 
 
 @app.get("/", include_in_schema=False)
-async def serve_frontend():
-    return FileResponse("static/index.html")
+async def serve_frontend(lang: str = "ru"):
+    return HTMLResponse(frontend(lang))
+
+
+@app.get("/privacy", include_in_schema=False)
+async def privacy_page(lang: str = "ru"):
+    return HTMLResponse(legal("privacy", lang))
+
+
+@app.get("/terms", include_in_schema=False)
+async def terms_page(lang: str = "ru"):
+    return HTMLResponse(legal("terms", lang))

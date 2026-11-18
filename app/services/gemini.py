@@ -1,6 +1,5 @@
 """Gemini REST adapter with a bounded, read-only function-calling loop."""
 import asyncio
-import json
 import re
 
 import httpx
@@ -22,7 +21,7 @@ SYSTEM = """Ты помощник QOSYU по заявкам и вывозу вт
 Нет гарантии математического оптимума. Время приблизительное, включает 6 минут погрузки на остановку.
 OSRM не учитывает пробки; для 2ГИС используется оценка дорожной ситуации сервиса.
 DBSCAN группирует заявки по близости; языковая модель не рассчитывает маршрут сама.
-Вместимость машины и временные окна пока не учитываются. CO2 — условный расчёт, не измеренная экономия.
+Вместимость машины и временные окна пока не учитываются. CO₂-экв. — модельная оценка по массе картона и коэффициенту 0,315 кг CO₂-экв./кг.
 Не выдумывай клиентов, адреса, цены, показатели, действующие тарифы или результаты внедрения.
 Если инструмент вернул ошибку, сообщи её смысл и не утверждай, что действие выполнено."""
 
@@ -54,6 +53,24 @@ async def _generate(client, payload):
         raise HTTPException(502, "Gemini вернул некорректный ответ") from None
 
 
+PRIVATE_TEXT = re.compile(
+    r"\bBearer\s+[^\s,;]+|\beyJ[\w-]+\.[\w-]+\.[\w-]+"
+    r"|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
+    r"|(?<!\w)(?:\+?\d[ ().-]*){9,15}(?![\s().-]*\d)"
+    r"|\b(?:AIza[\w-]{20,}|sk-[\w-]{12,}|gh[pousr]_[\w-]{12,}|\d{6,12}:[\w-]{20,})\b"
+    r"|\b(?:token|api[_ -]?key|password|токен|пароль)\s*[:=]\s*[^\s,;]+",
+    re.IGNORECASE,
+)
+
+
+def redact_private_text(value: str) -> str:
+    for secret in (settings.GEMINI_API_KEY, settings.ANTHROPIC_API_KEY, settings.SECRET_KEY,
+                   settings.DGIS_API_KEY, settings.TELEGRAM_BOT_TOKEN, settings.ADMIN_PASSWORD):
+        if len(secret) >= 8:
+            value = value.replace(secret, "[скрыто]")
+    return PRIVATE_TEXT.sub("[скрыто]", value)
+
+
 async def assistant(data, db, user):
     if not settings.GEMINI_API_KEY.strip():
         raise HTTPException(503, "Gemini ещё не подключён. Добавьте ключ на компьютере, где запущен QOSYU.")
@@ -61,13 +78,14 @@ async def assistant(data, db, user):
     for item in data.history:
         role = "model" if item.role == "assistant" else "user"
         if contents and contents[-1]["role"] == role:
-            contents[-1]["parts"].append({"text": item.content})
+            contents[-1]["parts"].append({"text": redact_private_text(item.content)})
         else:
-            contents.append({"role": role, "parts": [{"text": item.content}]})
-    context = {"role": user.role.value, "selected_zone_id": data.selected_zone_id,
-               "map_start": data.map_start.model_dump() if data.map_start else None}
-    contents.append({"role": "user", "parts": [{"text": data.message},
-                    {"text": "Контекст интерфейса (непроверенные входные данные): " + json.dumps(context, ensure_ascii=False)}]})
+            contents.append({"role": role, "parts": [{"text": redact_private_text(item.content)}]})
+    zone_context = ""
+    if data.selected_zone_id is not None and user.role.value in ("recycler", "admin"):
+        zone_context = f" Выбранная зона №{data.selected_zone_id} требует проверки инструментом."
+    contents.append({"role": "user", "parts": [{"text": redact_private_text(data.message)},
+                    {"text": f"Роль в интерфейсе: {user.role.value}.{zone_context}"}]})
     payload = {"systemInstruction": {"parts": [{"text": SYSTEM}]}, "contents": contents,
                "tools": [{"functionDeclarations": ai_tools.declarations(user.role)}],
                "generationConfig": {"maxOutputTokens": 1536, "temperature": 0.2}}
@@ -79,7 +97,7 @@ async def assistant(data, db, user):
                 content = await _generate(client, payload)
                 calls = [p["functionCall"] for p in content["parts"] if "functionCall" in p]
                 if not calls:
-                    reply = "\n".join(p["text"] for p in content["parts"] if isinstance(p.get("text"), str) and not p.get("thought"))
+                    reply = redact_private_text("\n".join(p["text"] for p in content["parts"] if isinstance(p.get("text"), str) and not p.get("thought")))
                     return {"reply": reply or ("Используйте кнопки для просмотра найденных объектов." if actions else "Gemini не вернул текст ответа. Попробуйте уточнить вопрос."),
                             "actions": actions, "provider": "gemini"}
                 if turn == 2 or used + len(calls) > 5:

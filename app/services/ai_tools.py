@@ -1,9 +1,11 @@
 """Read-only AI tools. Authorization is enforced here, never by the model."""
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from models import CollectionEvent, CollectionZone, RequestStatus, UserRole, WasteRequest, WasteType, ZoneStatus
+from services.collection_access import visible_zone_condition, zone_has_request
+from services.esg import calculate_co2_saved, zone_cardboard_weights
 
 
 class RequestFilter(BaseModel):
@@ -42,12 +44,10 @@ async def visible_requests(db, user):
     if user.role == UserRole.SME:
         return query.where(WasteRequest.sme_id == user.id)
     if user.role == UserRole.RECYCLER:
-        zones = (await db.execute(select(CollectionZone.request_ids).where(CollectionZone.recycler_id == user.id))).scalars().all()
-        own_ids = {rid for ids in zones for rid in (ids or [])}
-        return query.where(or_(
-            WasteRequest.status.in_([RequestStatus.PENDING, RequestStatus.CLUSTERED]),
-            WasteRequest.id.in_(own_ids),
-        ))
+        accessible_zone = select(CollectionZone.id).where(
+            visible_zone_condition(user), zone_has_request()
+        ).correlate(WasteRequest).exists()
+        return query.where(accessible_zone)
     if user.role == UserRole.ADMIN:
         return query
     raise HTTPException(403, "Недостаточно прав")
@@ -55,31 +55,31 @@ async def visible_requests(db, user):
 
 def visible_zones(user):
     query = select(CollectionZone)
-    if user.role == UserRole.RECYCLER:
-        return query.where(or_(CollectionZone.status == ZoneStatus.OPEN, CollectionZone.recycler_id == user.id))
-    if user.role == UserRole.ADMIN:
-        return query
+    if user.role in (UserRole.RECYCLER, UserRole.ADMIN):
+        return query.where(visible_zone_condition(user))
     raise HTTPException(403, "Зоны доступны переработчику")
 
 
 def request_data(r):
-    return {"id": r.id, "latitude": r.latitude, "longitude": r.longitude,
-            "waste_type": r.waste_type.value, "weight_kg": r.weight_kg, "status": r.status.value}
+    return {"id": r.id, "waste_type": r.waste_type.value, "weight_kg": r.weight_kg, "status": r.status.value}
 
 
 def zone_data(z):
-    return {"id": z.id, "centroid_lat": z.centroid_lat, "centroid_lon": z.centroid_lon,
-            "radius_km": z.radius_km, "total_weight_kg": z.total_weight_kg,
+    return {"id": z.id, "total_weight_kg": z.total_weight_kg,
             "request_count": len(z.request_ids or []), "status": z.status.value}
 
 
 async def map_items(kind, ids, db, user):
     if kind == "requests":
         query = (await visible_requests(db, user)).where(WasteRequest.id.in_(ids))
-        serializer = request_data
-    else:
+        def serializer(r):
+            return dict(request_data(r), latitude=r.latitude, longitude=r.longitude)
+    elif kind == "zones":
         query = visible_zones(user).where(CollectionZone.id.in_(ids))
-        serializer = zone_data
+        def serializer(z):
+            return dict(zone_data(z), centroid_lat=z.centroid_lat, centroid_lon=z.centroid_lon, radius_km=z.radius_km)
+    else:
+        raise HTTPException(404, "Тип объектов не найден")
     items = (await db.execute(query)).scalars().all()
     if len(items) != len(set(ids)):
         raise HTTPException(404, "Часть выбранных объектов больше недоступна. Повторите поиск.")
@@ -116,15 +116,21 @@ async def execute(name, args, db, user, map_start=None):
             selected = items[:50]
             rows = [zone_data(z) for z in selected]
             if filters.scope == "completed" and selected:
-                events = (await db.execute(select(CollectionEvent).where(
-                    CollectionEvent.zone_id.in_([z.id for z in selected])
-                ).order_by(CollectionEvent.id))).scalars().all()
+                event_query = select(CollectionEvent).where(CollectionEvent.zone_id.in_([z.id for z in selected]))
+                if user.role == UserRole.RECYCLER:
+                    event_query = event_query.where(CollectionEvent.recycler_id == user.id)
+                events = (await db.execute(event_query.order_by(CollectionEvent.id))).scalars().all()
                 by_zone = {event.zone_id: event for event in events}
+                weights = await zone_cardboard_weights(db, [z.id for z in selected])
                 for row in rows:
                     event = by_zone.get(row["id"])
                     if event is not None:
+                        weight = weights.get(row["id"], 0)
+                        if event.actual_weight_kg is not None and weight > 0 and weight == row["total_weight_kg"]:
+                            weight = event.actual_weight_kg
                         row.update(completed_at=event.end_time.isoformat() if event.end_time else None,
-                                   actual_weight_kg=event.actual_weight_kg, co2_saved_kg=event.co2_saved_kg)
+                                   actual_weight_kg=event.actual_weight_kg,
+                                   co2_saved_kg=calculate_co2_saved(weight))
             return {"items": rows, "truncated": len(items) > 50}, (
                 {"type": "show_zones", "ids": [z.id for z in selected]} if selected else None)
         if name == "preview_route":
@@ -137,7 +143,7 @@ async def execute(name, args, db, user, map_start=None):
                                      start_lon=map_start.lon if map_start else None,
                                      db=db, current_user=user)
             # No business names or full road geometry are sent to the AI provider.
-            summary = {k: route[k] for k in ["zone_id", "source", "approximate", "distance_km", "duration_min", "total_weight_kg", "start"]}
+            summary = {k: route[k] for k in ["zone_id", "source", "approximate", "distance_km", "duration_min", "total_weight_kg"]}
             summary["request_ids"] = [stop["request_id"] for stop in route["stops"]]
             summary["service_minutes_per_stop"] = route["service_minutes_per_stop"]
             return summary, {"type": "show_route", "zone_id": params.zone_id, "start": route["start"]}
@@ -145,4 +151,6 @@ async def execute(name, args, db, user, map_start=None):
     except (ValidationError, ValueError):
         return {"error": "Некорректные параметры инструмента. Проверьте тип, статус или номер зоны."}, None
     except HTTPException as exc:
+        if name == "preview_route" and exc.status_code in (403, 404):
+            return {"error": "Маршрут недоступен"}, None
         return {"error": exc.detail}, None

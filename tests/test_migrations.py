@@ -31,8 +31,12 @@ class MigrationTests(unittest.IsolatedAsyncioTestCase):
                 await conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
                 await conn.execute(text("CREATE TABLE waste_requests (id INTEGER PRIMARY KEY, weight_kg FLOAT NOT NULL)"))
                 await conn.execute(text("INSERT INTO waste_requests VALUES (17, 25.5)"))
-                await upgrade_schema(conn)
-                await upgrade_schema(conn)
+                await upgrade_schema(conn, schema)
+                await conn.execute(text(f"""INSERT INTO "{schema}".pilot_applications
+                    (company_name, contact, comment, language) VALUES ('Cafe', 'test@example.com', '', 'en')"""))
+                await upgrade_schema(conn, schema)
+                pilot = (await conn.execute(text(f'SELECT company_name FROM "{schema}".pilot_applications'))).scalar_one()
+                self.assertEqual(pilot, "Cafe")
                 row = (await conn.execute(text("SELECT id, weight_kg, address, pickup_note FROM waste_requests"))).one()
                 self.assertEqual(tuple(row), (17, 25.5, None, None))
             finally:

@@ -1,7 +1,9 @@
 import secrets
 import warnings
+from pathlib import Path
+from typing import Literal
 
-from pydantic import Field
+from pydantic import EmailStr, Field
 from pydantic_settings import BaseSettings
 
 
@@ -53,8 +55,22 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     ADMIN_PASSWORD: str = ""
 
+    # Public contact fields are optional.
+    CONTACT_LOCATION: str = ""
+    CONTACT_LOCATION_EN: str = ""
+    CONTACT_LOCATION_KK: str = ""
+    CONTACT_PHONE: str = Field(default="", pattern=r"^(\+?[0-9][0-9 ()-]{5,23}[0-9])?$")
+    CONTACT_EMAIL: EmailStr | Literal[""] = ""
+    CONTACT_INSTAGRAM: str = Field(default="", pattern=r"^(@?[A-Za-z0-9_.]{1,30})?$")
+    CONTACT_TIKTOK: str = Field(default="", pattern=r"^(@?[A-Za-z0-9_.]{1,24})?$")
+    CONTACT_TELEGRAM: str = Field(default="", pattern=r"^(@[A-Za-z0-9_]{5,32})?$")
+    CONTACT_WHATSAPP: str = Field(default="", pattern=r"^(\+?[0-9]{7,15})?$")
+
     class Config:
-        env_file = ".env"
+        env_file = (Path(__file__).resolve().parents[1] / ".env", ".env")
+        env_file_encoding = "utf-8"
+        # The shared file also contains Compose variables such as POSTGRES_DB.
+        extra = "ignore"
 
     @property
     def is_production(self) -> bool:

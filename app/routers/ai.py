@@ -23,7 +23,7 @@ from models import (
     ZoneStatus,
 )
 from security import rate_limit
-from services.esg import calculate_co2_saved
+from services.esg import calculate_co2_saved, collected_weights_query
 from services import ai_tools, gemini
 
 try:
@@ -53,7 +53,7 @@ def _ai_available() -> bool:
 
 SYSTEM_PROMPT = """Ты — ассистент QOSYU, цифровой платформы первой мили экологической логистики в Казахстане.
 
-Платформа объединяет мелкие партии вторсырья (картон, пластик, стекло, металл) от малого бизнеса в выгодные маршруты для переработчиков: бизнес создаёт заявку (сайт или Telegram-бот), AI кластеризует соседние заявки в зоны сбора, переработчик забирает объём по оптимальному маршруту, бизнес получает ESG-отчёт (кг переработано, CO₂ сэкономлено).
+Платформа принимает заявки на сбор вторсырья и помогает переработчику работать с зонами. ESG-отчёт показывает массу переданного сырья и модельный эквивалент CO₂ по массе картона.
 
 Тарифы: START — 0 ₸/мес (до 5 заявок), PRO — 9 900 ₸/мес (безлимит, приоритет, API), ENTERPRISE — индивидуально.
 
@@ -108,7 +108,7 @@ async def ai_status():
 async def _user_context(db: AsyncSession, user: User) -> str:
     """Персональный контекст пользователя для ассистента."""
     lines = [
-        f"Пользователь: {user.company_name}, роль: "
+        "Роль пользователя: "
         f"{'бизнес (сдаёт вторсырьё)' if user.role == UserRole.SME else 'переработчик' if user.role == UserRole.RECYCLER else 'администратор'}."
     ]
     if user.role == UserRole.SME:
@@ -124,28 +124,19 @@ async def _user_context(db: AsyncSession, user: User) -> str:
             lines.append("Последние заявки: " + "; ".join(
                 f"#{r.id} {r.waste_type.value} {r.weight_kg}кг ({r.status.value})" for r in reqs
             ))
-        total = float(
-            (
-                await db.execute(
-                    select(func.coalesce(func.sum(WasteRequest.weight_kg), 0.0)).where(
-                        WasteRequest.sme_id == user.id,
-                        WasteRequest.status.in_(
-                            [RequestStatus.COLLECTED, RequestStatus.VERIFIED]
-                        ),
-                    )
-                )
-            ).scalar()
-            or 0.0
-        )
+        total, cardboard_kg = (await db.execute(collected_weights_query().where(
+            WasteRequest.sme_id == user.id,
+            WasteRequest.status.in_([RequestStatus.COLLECTED, RequestStatus.VERIFIED]),
+        ))).one()
         lines.append(
-            f"Всего переработано: {round(total, 1)} кг, CO₂ сэкономлено: "
-            f"{round(calculate_co2_saved(total), 1)} кг."
+            f"Всего передано: {round(total, 1)} кг. Модельный эквивалент для картона: "
+            f"{calculate_co2_saved(cardboard_kg)} кг CO₂-экв."
         )
     elif user.role == UserRole.RECYCLER:
         open_zones = (
             await db.execute(
                 select(func.count(CollectionZone.id), func.coalesce(func.sum(CollectionZone.total_weight_kg), 0.0))
-                .where(CollectionZone.status == ZoneStatus.OPEN)
+                .where(CollectionZone.status == ZoneStatus.OPEN, CollectionZone.recycler_id.is_(None))
             )
         ).one()
         my_zones = (
@@ -181,8 +172,8 @@ async def assistant(
         )
     client = _get_client()
     context = await _user_context(db, current_user)
-    messages = [{"role": m.role, "content": m.content} for m in data.history]
-    messages.append({"role": "user", "content": data.message})
+    messages = [{"role": m.role, "content": gemini.redact_private_text(m.content)} for m in data.history]
+    messages.append({"role": "user", "content": gemini.redact_private_text(data.message)})
     try:
         response = await client.messages.create(
             model=settings.AI_MODEL,

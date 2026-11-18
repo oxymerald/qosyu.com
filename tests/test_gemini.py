@@ -95,6 +95,21 @@ class GeminiTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("error", result)
             self.assertIsNone(action)
 
+    async def test_contact_and_token_patterns_are_removed_before_provider_call(self):
+        captured = []
+        async def generate(client, payload):
+            captured.append(copy.deepcopy(payload))
+            return {"role": "model", "parts": [{"text": "OK"}]}
+        with patch.object(settings, "GEMINI_API_KEY", "test-secret"), patch.object(gemini, "_generate", side_effect=generate):
+            await gemini.assistant(AssistantIn(
+                message="Зона #42. Позвонить +7 (701) 123-45-67, test@example.com, Bearer abc123.",
+                history=[{"role": "user", "content": "token: hidden-token"}],
+            ), None, SimpleNamespace(role=UserRole.SME))
+        payload = json.dumps(captured, ensure_ascii=False)
+        self.assertIn("Зона #42", payload)
+        for secret in ["123-45-67", "test@example.com", "abc123", "hidden-token"]:
+            self.assertNotIn(secret, payload)
+
 
 @unittest.skipUnless(os.getenv("QOSYU_ISOLATED_TEST") == "1", "requires isolated database")
 class ToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
@@ -112,7 +127,7 @@ class ToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 await db.flush()
                 owner, stranger, recycler, other_recycler = people
                 requests = []
-                for sme, status in [(owner, RequestStatus.PENDING), (stranger, RequestStatus.ASSIGNED), (owner, RequestStatus.ASSIGNED)]:
+                for sme, status in [(owner, RequestStatus.CLUSTERED), (stranger, RequestStatus.CLUSTERED), (owner, RequestStatus.ASSIGNED)]:
                     req = WasteRequest(sme_id=sme.id, waste_type=WasteType.CARDBOARD, weight_kg=10, latitude=47.11, longitude=51.88, location_geom="SRID=4326;POINT(51.88 47.11)", status=status)
                     db.add(req)
                     requests.append(req)
@@ -123,12 +138,33 @@ class ToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                     db.add(zone)
                     zones.append(zone)
                 await db.flush()
+                open_zone = CollectionZone(centroid_lat=47.11, centroid_lon=51.88, radius_km=0,
+                    total_weight_kg=10, request_ids=[requests[0].id], status=ZoneStatus.OPEN)
+                db.add(open_zone)
+                await db.flush()
                 for user, forbidden in [(owner, requests[1]), (stranger, requests[0]), (recycler, requests[1])]:
                     with self.assertRaises(HTTPException) as caught:
                         await ai_tools.map_items("requests", [forbidden.id], db, user)
                     self.assertEqual(caught.exception.status_code, 404)
                 items = await ai_tools.map_items("requests", [requests[0].id, requests[2].id], db, recycler)
                 self.assertEqual(len(items), 2)
+                from routers.recycler import map_requests
+                requests[0].address = "Abay 1"
+                requests[1].address = "Abay 1"
+                requests[0].pickup_note = "Side door"
+                await db.flush()
+                filtered = await map_requests(10, 10, RequestStatus.CLUSTERED, "aBaY", db, recycler)
+                self.assertEqual([item["id"] for item in filtered["items"]], [requests[0].id])
+                notes = await map_requests(10, 10, RequestStatus.CLUSTERED, "side door", db, recycler)
+                self.assertEqual(notes["items"][0]["pickup_note"], "Side door")
+                wildcard = await map_requests(10, 10, RequestStatus.CLUSTERED, "%", db, recycler)
+                self.assertEqual(wildcard["items"], [])
+                model_data, _ = await ai_tools.execute("show_requests", {}, db, recycler)
+                visible_ids = {r["id"] for r in model_data["items"]}
+                self.assertTrue({requests[0].id, requests[2].id} <= visible_ids)
+                self.assertNotIn(requests[1].id, visible_ids)
+                for row in model_data["items"]:
+                    self.assertEqual(set(row), {"id", "weight_kg", "status", "waste_type"})
                 result, action = await ai_tools.execute("preview_route", {"zone_id": zones[0].id}, db, recycler)
                 self.assertIn("error", result)
                 self.assertIsNone(action)
@@ -154,7 +190,7 @@ class ToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 history, action = await ai_tools.execute("show_zones", {"scope": "completed"}, db, recycler)
                 self.assertEqual(action["ids"], [zones[1].id])
                 self.assertEqual(history["items"][0]["actual_weight_kg"], 9)
-                self.assertEqual(history["items"][0]["co2_saved_kg"], 4.5)
+                self.assertEqual(history["items"][0]["co2_saved_kg"], 2.84)
                 active, _ = await ai_tools.execute("show_zones", {"scope": "mine"}, db, recycler)
                 self.assertEqual(active["items"], [])
                 self.assertEqual((await db.execute(select(CollectionZone.status).where(CollectionZone.id == zones[1].id))).scalar(), ZoneStatus.COMPLETED)

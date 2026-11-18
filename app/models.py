@@ -45,6 +45,16 @@ class User(Base):
     rating_avg = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class PilotApplication(Base):
+    """Guest pilot enquiries, separate from operational waste requests."""
+    __tablename__ = "pilot_applications"
+    id = Column(Integer, primary_key=True)
+    company_name = Column(String(120), nullable=False)
+    contact = Column(String(160), nullable=False)
+    comment = Column(String(2000), nullable=False, default="")
+    language = Column(String(2), nullable=False, default="ru")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 class WasteRequest(Base):
     __tablename__ = "waste_requests"
     id = Column(Integer, primary_key=True)

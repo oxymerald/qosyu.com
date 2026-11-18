@@ -24,6 +24,7 @@ function toast(message, kind = "info") {
 }
 
 async function api(endpoint, method = "GET", body = null) {
+  if (state.demo && !endpoint.startsWith("/public/")) return QosyuDemo.request(endpoint, method, body);
   const headers = {};
   if (body !== null) headers["Content-Type"] = "application/json";
   if (state.token) headers["Authorization"] = `Bearer ${state.token}`;
@@ -78,6 +79,8 @@ const state = {
   currentRouteZoneId: null,
   mapProvider: null,
   selectedAddress: null,
+  demo: null,
+  recyclerFilters: null,
 };
 
 function setSession(token, user) {
@@ -100,6 +103,9 @@ function setSession(token, user) {
   document.getElementById("assistantLog").innerHTML = "";
   state.token = token;
   state.user = user;
+  state.demo = null;
+  state.recyclerFilters = null;
+  document.getElementById("demoNotice").classList.add("hidden");
   if (token) localStorage.setItem("qosyu_token", token);
   else localStorage.removeItem("qosyu_token");
   renderHeader();
@@ -203,6 +209,7 @@ document.addEventListener("langchange", () => {
     renderCabinetSidebar();
     const active = document.querySelector(".tab-btn.tab-active")?.dataset.tab;
     if (active) activateTab(active);
+    if (state.recyclerFilters) loadMapData();
   }
 });
 
@@ -230,9 +237,10 @@ document.getElementById("headerActions").addEventListener("click", (e) => {
   if (action === "logout") { setSession(null, null); showLanding(); toast(t("toast.loggedOut")); }
 });
 
-document.querySelectorAll('[data-action="register"]').forEach((btn) =>
-  btn.addEventListener("click", () => (state.user ? showCabinet() : openRegisterModal()))
+document.querySelectorAll('[data-action="prototype"]').forEach((btn) =>
+  btn.addEventListener("click", () => (state.user ? showCabinet() : openLoginModal()))
 );
+document.querySelector('[data-action="pilot"]').addEventListener("click", openPilotModal);
 
 /* ================= Модалки ================= */
 
@@ -254,6 +262,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal
 function openLoginModal() {
   openModal(`
     <h3>${esc(t("modal.loginTitle"))}</h3>
+    ${demoButtons()}
     <form id="loginForm">
       <label for="loginEmail">${esc(t("modal.email"))}</label>
       <input class="field" id="loginEmail" type="email" required autocomplete="email" />
@@ -264,6 +273,7 @@ function openLoginModal() {
     </form>
     <button class="modal-switch" id="toRegister">${esc(t("modal.toRegister"))}</button>`);
   document.getElementById("toRegister").addEventListener("click", openRegisterModal);
+  bindDemoButtons();
   document.getElementById("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const errorBox = document.getElementById("loginError");
@@ -326,22 +336,6 @@ function openRegisterModal() {
     }
   });
 }
-
-/* ================= Политики ================= */
-
-document.getElementById("privacyLink").addEventListener("click", (e) => {
-  e.preventDefault();
-  openModal(`<h3>${esc(t("footer.privacy"))}</h3><div class="policy-text">
-    <p>QOSYU собирает минимально необходимые данные: email, название компании и координаты точек сбора вторсырья.</p>
-    <p>Пароли хранятся в виде хэша (bcrypt). При подключении 2ГИС сервер передаёт ему поисковые адреса, область карты и координаты маршрута. Резервные сервисы карты и маршрутов — OpenStreetMap и OSRM.</p>
-    <p>При отправке вопроса ИИ выбранному провайдеру передаются текст диалога и необходимые для ответа данные доступных вам заявок: номера, координаты, тип сырья, масса и статусы. Пароли и ключи API в диалог не включаются. Не указывайте в вопросах конфиденциальные сведения.</p></div>`);
-});
-document.getElementById("termsLink").addEventListener("click", (e) => {
-  e.preventDefault();
-  openModal(`<h3>${esc(t("footer.terms"))}</h3><div class="policy-text">
-    <p>Использование сервиса означает согласие с условиями. Пользователь несёт ответственность за достоверность информации в заявках.</p>
-    <p>Платформа выступает координатором первой мили: объединяет заявки и строит маршруты, не осуществляя перевозку самостоятельно.</p></div>`);
-});
 
 /* ================= Вкладки кабинета ================= */
 
@@ -459,7 +453,7 @@ function updateSelectedPoint() {
     : t(state.user?.role === "sme" ? "map.notSelected" : "map.depotHint");
 }
 
-async function loadMapData() {
+async function loadMapData(fitFilteredPoints = false) {
   if (!state.map || !state.user) return;
   const loadId = ++state.mapLoadId;
   try {
@@ -489,9 +483,42 @@ async function loadMapData() {
       state.user.role === "recycler" ? api("/recycler/zones/my") : Promise.resolve([]),
     ]);
     if (loadId !== state.mapLoadId) return;
-    const zones = [...open, ...mine];
+    let zones = [...open, ...mine];
+    const filters = state.user.role === "recycler" ? state.recyclerFilters : null;
+    const points = filters ? await api(`/recycler/map-requests?${filters}`) : null;
+    if (loadId !== state.mapLoadId) return;
     state.markersLayer.clearLayers();
     state.zonesLayer.clearLayers();
+    if (points) {
+      const zoneIds = new Set(points.items.map(item => item.zone_id));
+      zones = zones.filter(zone => zoneIds.has(zone.id));
+      for (const item of points.items) {
+        const marker = L.circleMarker([item.latitude, item.longitude], {
+          bubblingMouseEvents: false, radius: 7, color: "#990011", fillOpacity: .65,
+        });
+        marker.bindPopup(() => {
+          const popup = document.createElement("div");
+          popup.innerHTML = `#${esc(item.id)} · ${esc(item.weight_kg)} ${esc(t("common.kg"))}<br>${esc(statusLabel(item.status))}${pickupDetails(item)}`;
+          const button = document.createElement("button");
+          button.className = "btn btn-outline btn-sm";
+          button.textContent = t("cab.route");
+          button.addEventListener("click", () => showZoneRoute(item.zone_id));
+          popup.appendChild(button);
+          return popup;
+        });
+        marker.addTo(state.markersLayer);
+      }
+      if (fitFilteredPoints && points.items.length) {
+        const bounds = L.latLngBounds(points.items.map(item => [item.latitude, item.longitude]));
+        state.map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16 });
+      }
+    }
+    const filterResult = document.getElementById("recyclerFilterResult");
+    if (filterResult) {
+      filterResult.textContent = points
+        ? `${t("filters.found")} ${points.items.length}${points.truncated ? "+ · " + t("filters.truncated") : ""}`
+        : "";
+    }
     zones.forEach((z) => {
       L.circle([z.centroid_lat, z.centroid_lon], {
         bubblingMouseEvents: false,
@@ -562,6 +589,28 @@ function renderCabinetSidebar() {
   } else if (state.user.role === "recycler") {
     box.innerHTML = `
       <div class="side-block">
+        <h3>${esc(t("filters.title"))}</h3>
+        <form id="recyclerFilters">
+          <div class="recycler-filter-range">
+            <div><label for="minKg">${esc(t("filters.min"))}</label>
+            <input id="minKg" name="min_kg" class="field" type="number" min="0" step="any" /></div>
+            <div><label for="maxKg">${esc(t("filters.max"))}</label>
+            <input id="maxKg" name="max_kg" class="field" type="number" min="0" step="any" /></div>
+          </div>
+          <label for="pickupStatus">${esc(t("filters.status"))}</label>
+          <select class="field" id="pickupStatus" name="status">
+            <option value="">${esc(t("filters.any"))}</option>
+            ${["clustered", "assigned", "collected", "verified"].map(status =>
+              `<option value="${status}">${esc(statusLabel(status))}</option>`).join("")}
+          </select>
+          <label for="pickupSearch">${esc(t("filters.query"))}</label>
+          <input id="pickupSearch" name="q" class="field" type="search" maxlength="160" />
+          <button class="btn btn-wine btn-sm" type="submit">${esc(t("filters.apply"))}</button>
+          <button class="btn btn-outline btn-sm" type="reset">${esc(t("filters.reset"))}</button>
+          <p class="meta" id="recyclerFilterResult" aria-live="polite"></p>
+        </form>
+      </div>
+      <div class="side-block">
         <h3>${esc(t("map.start"))}</h3>
         <p class="meta">${esc(t("map.startHint"))}</p>
         <p id="selectedPointLabel" class="point-label" aria-live="polite"></p>
@@ -578,6 +627,29 @@ function renderCabinetSidebar() {
         <div id="sideMyZones" class="side-stack"></div>
       </div>
       <div class="side-block" id="telegramBlock"></div>`;
+    const filterForm = document.getElementById("recyclerFilters");
+    for (const [name, value] of new URLSearchParams(state.recyclerFilters || "")) {
+      filterForm.elements.namedItem(name).value = value;
+    }
+    filterForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const params = new URLSearchParams();
+      for (const [key, value] of new FormData(filterForm)) {
+        if (value.trim()) params.set(key, value.trim());
+      }
+      if (params.has("min_kg") && params.has("max_kg") && Number(params.get("min_kg")) > Number(params.get("max_kg"))) {
+        document.getElementById("recyclerFilterResult").textContent = t("filters.invalid");
+        return;
+      }
+      state.recyclerFilters = params;
+      clearRoute();
+      await loadMapData(true);
+    });
+    filterForm.addEventListener("reset", () => {
+      state.recyclerFilters = null;
+      clearRoute();
+      loadMapData();
+    });
     document.getElementById("resetStartBtn").addEventListener("click", () => {
       state.selectedMarker?.remove();
       state.selectedMarker = null;
@@ -741,7 +813,7 @@ async function loadSmeSidebar() {
     const eng = await api("/analytics/esg/sme");
     document.getElementById("sideEsg").innerHTML = `
       <div class="list-item"><span>${esc(t("cab.esg.recycled"))}</span><strong>${esc(eng.total_recycled_kg)} кг</strong></div>
-      <div class="list-item"><span>${esc(t("cab.esg.co2"))}</span><strong>${esc(eng.co2_saved_kg)} кг</strong></div>
+      <div class="list-item"><span>${esc(t("cab.esg.co2"))}<br><small class="meta">${esc(t("co2.formula"))}</small></span><strong>${new Intl.NumberFormat(getLang()).format(eng.co2_saved_kg)} ${esc(t("common.kg"))}</strong></div>
       <div class="list-item"><span>${esc(t("cab.esg.trees"))}</span><strong>${esc(eng.equivalent_trees)}</strong></div>`;
   } catch (err) { toast(err.message, "error"); }
 }
@@ -1011,6 +1083,7 @@ async function openChat(partnerId, partnerName) {
   } catch (err) { toast(err.message, "error"); }
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
+  if (state.demo) return;
   const ws = new WebSocket(`${proto}://${location.host}/chat/ws/${partnerId}?token=${encodeURIComponent(state.token)}`);
   state.chatWs = ws;
   ws.onmessage = (e) => {
@@ -1244,7 +1317,7 @@ async function initAssistant() {
     document.getElementById("assistantInput").disabled = !status.available;
     document.querySelector("#assistantForm button").disabled = !status.available;
     if (!status.available) {
-      log.innerHTML = `<div class="assistant-msg bot">${esc(t("assistant.setupNeeded"))}</div>`;
+      log.innerHTML = `<div class="assistant-msg bot">${esc(t(state.demo ? "demo.ai" : "assistant.setupNeeded"))}</div>`;
       document.getElementById("assistantInput").disabled = true;
       return;
     }
@@ -1317,7 +1390,7 @@ async function loadAdmin() {
       <div class="admin-tile"><span class="tile-num">${s.users.recycler}</span><span class="tile-cap">${esc(t("admin.recyclers"))}</span></div>
       <div class="admin-tile"><span class="tile-num">${s.requests.total}</span><span class="tile-cap">${esc(t("admin.requestsTotal"))}</span></div>
       <div class="admin-tile"><span class="tile-num">${s.esg.collected_kg}</span><span class="tile-cap">${esc(t("admin.collected"))}</span></div>
-      <div class="admin-tile"><span class="tile-num">${s.esg.co2_saved_kg}</span><span class="tile-cap">${esc(t("admin.co2"))}</span></div>
+      <div class="admin-tile"><span class="tile-num">${new Intl.NumberFormat(getLang()).format(s.esg.co2_saved_kg)}</span><span class="tile-cap">${esc(t("admin.co2"))}</span><small class="meta">${esc(t("co2.formula"))}</small></div>
       <div class="admin-tile"><span class="tile-num">${s.zones.open}</span><span class="tile-cap">${esc(t("admin.openZones"))}</span></div>`;
 
     // Серия за 14 дней — SVG-линия

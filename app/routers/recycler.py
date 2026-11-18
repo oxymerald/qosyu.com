@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
@@ -12,14 +12,53 @@ from models import (
     User,
     UserRole,
     WasteRequest,
+    WasteType,
     ZoneStatus,
 )
 from schemas import CollectionZoneOut, ZoneComplete
-from services.esg import calculate_co2_saved
+from services.collection_access import visible_zone_condition, zone_has_request
+from services.esg import CO2E_FORMULA_RU, calculate_co2_saved
 from services.geo import compute_route
 from security import rate_limit
 
 router = APIRouter()
+
+
+@router.get("/map-requests", dependencies=[Depends(rate_limit("recycler-map-requests", limit=60, window_seconds=60))])
+async def map_requests(
+    min_kg: float | None = Query(None, ge=0),
+    max_kg: float | None = Query(None, ge=0),
+    status: RequestStatus | None = None,
+    q: str = Query("", max_length=160),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECYCLER)),
+):
+    if min_kg is not None and max_kg is not None and min_kg > max_kg:
+        raise HTTPException(422, "Некорректный диапазон массы")
+    query = (
+        select(WasteRequest, CollectionZone.id)
+        .join(CollectionZone, zone_has_request())
+        .where(visible_zone_condition(current_user))
+    )
+    if min_kg is not None:
+        query = query.where(WasteRequest.weight_kg >= min_kg)
+    if max_kg is not None:
+        query = query.where(WasteRequest.weight_kg <= max_kg)
+    if status is not None:
+        query = query.where(WasteRequest.status == status)
+    if needle := q.strip():
+        query = query.where(or_(
+            WasteRequest.address.icontains(needle, autoescape=True),
+            WasteRequest.pickup_note.icontains(needle, autoescape=True),
+        ))
+    limit = 300
+    rows = (await db.execute(query.order_by(WasteRequest.id.desc(), CollectionZone.id.desc()).limit(limit + 1))).all()
+    return {"truncated": len(rows) > limit, "items": [
+        {"id": pickup.id, "zone_id": zone_id, "latitude": pickup.latitude, "longitude": pickup.longitude,
+         "weight_kg": pickup.weight_kg, "status": pickup.status.value, "waste_type": pickup.waste_type.value,
+         "address": pickup.address, "pickup_note": pickup.pickup_note}
+        for pickup, zone_id in rows[:limit]
+    ]}
 
 
 async def _notify_zone_smes(zone_request_ids: list[int], text: str):
@@ -110,20 +149,22 @@ async def zone_route(
     """Оптимальный маршрут объезда точек зоны: порядок, дистанция, ETA, геометрия."""
     if (start_lat is None) != (start_lon is None):
         raise HTTPException(status_code=422, detail="Укажите обе координаты начала маршрута")
-    zone = await db.get(CollectionZone, zone_id)
+    if current_user.role not in (UserRole.RECYCLER, UserRole.ADMIN):
+        raise HTTPException(status_code=403, detail="Маршрут доступен переработчику")
+    zone = await db.scalar(select(CollectionZone).where(
+        CollectionZone.id == zone_id, visible_zone_condition(current_user)
+    ))
     if not zone:
+        # Preserve the route API's distinction for existing callers.
+        if await db.scalar(select(CollectionZone.id).where(CollectionZone.id == zone_id)):
+            raise HTTPException(status_code=403, detail="Зона недоступна")
         raise HTTPException(status_code=404, detail="Зона не найдена")
-    if (
-        current_user.role == UserRole.RECYCLER
-        and zone.status != ZoneStatus.OPEN
-        and zone.recycler_id != current_user.id
-    ):
-        raise HTTPException(status_code=403, detail="Зона закреплена за другим переработчиком")
 
     result = await db.execute(
         select(WasteRequest, User.company_name)
         .join(User, WasteRequest.sme_id == User.id)
-        .where(WasteRequest.id.in_(zone.request_ids or []))
+        .join(CollectionZone, zone_has_request())
+        .where(CollectionZone.id == zone_id, visible_zone_condition(current_user))
         .order_by(WasteRequest.id)
     )
     rows = result.all()
@@ -189,6 +230,8 @@ async def complete_zone(
     if zone.status not in (ZoneStatus.ASSIGNED, ZoneStatus.IN_PROGRESS):
         raise HTTPException(status_code=409, detail="Зона не находится в работе")
     request_ids = list(zone.request_ids or [])
+    materials = (await db.execute(select(WasteRequest.waste_type, WasteRequest.weight_kg)
+                                  .where(WasteRequest.id.in_(request_ids)))).all()
     await db.execute(
         update(WasteRequest)
         .where(WasteRequest.id.in_(request_ids))
@@ -196,8 +239,10 @@ async def complete_zone(
     )
     zone.status = ZoneStatus.COMPLETED
     actual_weight = data.actual_weight_kg if data else None
-    collected_weight = actual_weight or zone.total_weight_kg
-    co2_saved = calculate_co2_saved(collected_weight)
+    cardboard_kg = sum(weight for material, weight in materials if material == WasteType.CARDBOARD)
+    if actual_weight is not None and materials and all(material == WasteType.CARDBOARD for material, _ in materials):
+        cardboard_kg = actual_weight
+    co2_saved = calculate_co2_saved(cardboard_kg)
     event = CollectionEvent(
         zone_id=zone.id,
         recycler_id=current_user.id,
@@ -212,7 +257,7 @@ async def complete_zone(
         _notify_zone_smes,
         request_ids,
         f"✅ QOSYU: вторсырьё вывезено!\n\nЗона #{zone_id} завершена. "
-        f"Ваш ESG-отчёт обновлён: +{round(co2_saved, 1)} кг CO₂ сэкономлено. "
+        f"Модельный эквивалент для зоны: {co2_saved} кг CO₂-экв.\n{CO2E_FORMULA_RU}\n"
         "Спасибо, что перерабатываете!",
     )
     return {"message": "Зона завершена, ESG-метрики обновлены"}

@@ -203,7 +203,6 @@ const TRANSLATIONS = {
     "cab.noRequests": "Заявок пока нет",
     "cab.esgReport": "ESG-отчёт",
     "cab.esg.recycled": "Передано на переработку",
-    "cab.esg.co2": "CO₂ сэкономлено",
     "cab.esg.trees": "Эквивалент деревьев",
     "cab.telegram": "Telegram-уведомления",
     "cab.telegram.hint": "Привяжите Telegram, чтобы получать статусы вывоза и создавать заявки в боте.",
@@ -535,7 +534,6 @@ const TRANSLATIONS = {
     "cab.noRequests": "No requests yet",
     "cab.esgReport": "ESG report",
     "cab.esg.recycled": "Sent to recycling",
-    "cab.esg.co2": "CO₂ saved",
     "cab.esg.trees": "Tree equivalent",
     "cab.telegram": "Telegram notifications",
     "cab.telegram.hint": "Link Telegram to get pickup statuses and create requests in the bot.",
@@ -867,7 +865,6 @@ const TRANSLATIONS = {
     "cab.noRequests": "Әзірге өтінім жоқ",
     "cab.esgReport": "ESG-есеп",
     "cab.esg.recycled": "Өңдеуге берілді",
-    "cab.esg.co2": "CO₂ үнемделді",
     "cab.esg.trees": "Ағаш баламасы",
     "cab.telegram": "Telegram-хабарламалар",
     "cab.telegram.hint": "Шығару статустарын алу және ботта өтінім жасау үшін Telegram-ды байланыстырыңыз.",
@@ -1113,8 +1110,33 @@ Object.assign(TRANSLATIONS.kk, {
   "cab.esg.trees": "Шартты ағаш баламасы",
 });
 
+Object.assign(TRANSLATIONS.ru, {
+  "filters.title": "Фильтры точек сбора", "filters.min": "От, кг", "filters.max": "До, кг",
+  "filters.status": "Статус заявки", "filters.any": "Все статусы", "filters.query": "Адрес или заметка",
+  "filters.apply": "Показать точки", "filters.reset": "Сбросить", "filters.found": "Точек найдено:",
+  "filters.truncated": "Уточните фильтр", "filters.invalid": "Минимум не должен превышать максимум.",
+  "admin.co2": "CO₂-экв., кг",
+  "co2.formula": "Расчётный модельный эквивалент: масса картона × 0,315 кг CO₂-экв./кг.",
+});
+Object.assign(TRANSLATIONS.en, {
+  "filters.title": "Pickup filters", "filters.min": "Min, kg", "filters.max": "Max, kg",
+  "filters.status": "Request status", "filters.any": "All statuses", "filters.query": "Address or pickup note",
+  "filters.apply": "Show points", "filters.reset": "Reset", "filters.found": "Points found:",
+  "filters.truncated": "Refine the filters", "filters.invalid": "Minimum must not exceed maximum.",
+  "admin.co2": "CO₂e, kg",
+  "co2.formula": "Modelled equivalent: cardboard mass × 0.315 kg CO₂e/kg.",
+});
+Object.assign(TRANSLATIONS.kk, {
+  "filters.title": "Жинау нүктелерінің сүзгілері", "filters.min": "Кемі, кг", "filters.max": "Көбі, кг",
+  "filters.status": "Өтінім мәртебесі", "filters.any": "Барлық мәртебе", "filters.query": "Мекенжай немесе ескертпе",
+  "filters.apply": "Нүктелерді көрсету", "filters.reset": "Тазарту", "filters.found": "Табылған нүктелер:",
+  "filters.truncated": "Сүзгіні нақтылаңыз", "filters.invalid": "Ең аз салмақ ең көп салмақтан аспауға тиіс.",
+  "admin.co2": "CO₂-бал., кг",
+  "co2.formula": "Модельдік балама: картон массасы × 0,315 кг CO₂-бал./кг.",
+});
+
 const SUPPORTED_LANGS = ["ru", "en", "kk"];
-let currentLang = localStorage.getItem("qosyu_lang") || "ru";
+let currentLang = new URLSearchParams(location.search).get("lang") || localStorage.getItem("qosyu_lang") || "ru";
 if (!SUPPORTED_LANGS.includes(currentLang)) currentLang = "ru";
 
 function t(key) {
@@ -1133,6 +1155,7 @@ function applyTranslations(root = document) {
     el.setAttribute("placeholder", t(el.getAttribute("data-i18n-ph")));
   });
   document.documentElement.lang = currentLang === "kk" ? "kk" : currentLang;
+  if (typeof updatePublicMetadata === "function") updatePublicMetadata();
 }
 
 function setLang(lang) {
