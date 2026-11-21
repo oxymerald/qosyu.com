@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # свой OSRM-инстанс или OpenRouteService (см. README).
     OSRM_BASE_URL: str = "https://router.project-osrm.org"
     TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_BOT_USERNAME: str = ""
     # --- AI (Gemini) ---
     AI_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""

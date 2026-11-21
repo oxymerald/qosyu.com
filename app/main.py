@@ -5,9 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from auth import get_password_hash
@@ -29,7 +30,7 @@ from routers import (
     telegram_bot,
     public,
 )
-from public_pages import frontend, legal
+from public_pages import frontend, legal, not_found_page, robots_txt, sitemap_xml
 from security import (
     BodySizeLimitMiddleware,
     PayloadTooLargeError,
@@ -123,6 +124,25 @@ async def payload_too_large_handler(request: Request, exc: PayloadTooLargeError)
     return JSONResponse(status_code=413, content={"detail": "Тело запроса слишком большое"})
 
 
+_API_PREFIXES = (
+    "/auth", "/requests", "/recycler", "/clustering", "/analytics",
+    "/chat", "/marketplace", "/admin", "/ai", "/maps", "/public", "/static",
+)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if (
+        exc.status_code == 404
+        and request.method == "GET"
+        and "text/html" in (request.headers.get("accept") or "")
+        and not request.url.path.startswith(_API_PREFIXES)
+    ):
+        lang = request.query_params.get("lang", "ru")
+        return HTMLResponse(not_found_page(lang), status_code=404)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     # Не раскрываем стектрейсы и внутренности наружу
@@ -187,3 +207,17 @@ async def privacy_page(lang: str = "ru"):
 @app.get("/terms", include_in_schema=False)
 async def terms_page(lang: str = "ru"):
     return HTMLResponse(legal("terms", lang))
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots():
+    return PlainTextResponse(robots_txt(), headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap():
+    return Response(
+        sitemap_xml(),
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

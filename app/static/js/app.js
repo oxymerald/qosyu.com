@@ -69,6 +69,8 @@ const state = {
   chatWs: null,
   chatPartnerId: null,
   chatPartnerName: null,
+  chatReconnectTimer: null,
+  chatReconnectAttempt: 0,
   leafletLoading: null,
   selectedPoint: null,
   selectedMarker: null,
@@ -81,6 +83,7 @@ const state = {
   selectedAddress: null,
   demo: null,
   recyclerFilters: null,
+  features: null,
 };
 
 function setSession(token, user) {
@@ -105,6 +108,8 @@ function setSession(token, user) {
   state.user = user;
   state.demo = null;
   state.recyclerFilters = null;
+  state.features = null;
+  closeChatSocket();
   document.getElementById("demoNotice").classList.add("hidden");
   if (token) localStorage.setItem("qosyu_token", token);
   else localStorage.removeItem("qosyu_token");
@@ -349,8 +354,14 @@ const panes = {
 };
 
 function updateRoleTabs() {
-  const isAdmin = state.user?.role === "admin";
+  const role = state.user?.role;
+  const isAdmin = role === "admin";
   document.getElementById("tabAdminBtn").classList.toggle("hidden", !isAdmin);
+  const reqTab = document.getElementById("tabRequestsBtn");
+  if (reqTab) {
+    reqTab.classList.toggle("hidden", isAdmin);
+    reqTab.textContent = t(role === "recycler" ? "tab.history" : "tab.requests");
+  }
   // AI-помощник показываем всем авторизованным (виджет сам сообщит, если ключ не задан)
   document.getElementById("tabAssistantBtn").classList.toggle("hidden", !state.user);
 }
@@ -473,7 +484,7 @@ async function loadMapData(fitFilteredPoints = false) {
           radius: 7, color: ["collected", "verified"].includes(r.status) ? "#24815d" : "#990011",
           fillOpacity: 0.8,
         })
-          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} кг<br>${esc(statusLabel(r.status))}${pickupDetails(r)}`)
+          .bindPopup(`#${r.id} · ${esc(wasteLabel(r.waste_type))} — ${esc(r.weight_kg)} ${esc(t("common.kg"))}<br>${esc(statusLabel(r.status))}${pickupDetails(r)}`)
           .addTo(state.markersLayer);
       });
       return;
@@ -530,7 +541,7 @@ async function loadMapData(fitFilteredPoints = false) {
       })
         .bindPopup(() => {
           const box = document.createElement("div");
-          box.innerHTML = `#${z.id} · ${z.request_count} · ${esc(z.total_weight_kg)} кг<br>${esc(z.status === "open" ? t("cab.openZones") : t("cab.myZones"))}<br>`;
+          box.innerHTML = `#${z.id} · ${z.request_count} · ${esc(z.total_weight_kg)} ${esc(t("common.kg"))}<br>${esc(z.status === "open" ? t("cab.openZones") : t("cab.myZones"))}<br>`;
           const button = document.createElement("button");
           button.className = "btn btn-outline btn-sm";
           button.textContent = t("cab.route");
@@ -549,7 +560,11 @@ function renderCabinetSidebar() {
   if (!state.user) return;
   const userCard = document.getElementById("cabinetUserCard");
   const roleLabel = state.user.role === "sme" ? t("benefit.business") : state.user.role === "recycler" ? t("benefit.recycler") : "Admin";
-  userCard.innerHTML = `<strong>${esc(state.user.company_name || state.user.email)}</strong><span class="role-chip">${esc(roleLabel)}</span>`;
+  userCard.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+    <span><strong>${esc(state.user.company_name || state.user.email)}</strong><span class="role-chip">${esc(roleLabel)}</span></span>
+    ${!state.demo ? `<button class="btn btn-outline btn-sm" id="changePassBtn" type="button">${esc(t("cab.changePassword"))}</button>` : ""}
+  </div>`;
+  document.getElementById("changePassBtn")?.addEventListener("click", openChangePasswordModal);
 
   const box = document.getElementById("cabinetActions");
   if (state.user.role === "sme") {
@@ -675,7 +690,7 @@ function renderCabinetSidebar() {
   }
   box.insertAdjacentHTML("afterbegin", `<div class="side-block"><h3>${esc(t("map.searchTitle"))}</h3>
     <form id="mapSearchForm"><label for="mapSearchInput">${esc(t("map.searchHint"))}</label>
-      <input id="mapSearchInput" class="field" minlength="3" maxlength="250" required placeholder="Атырау, Абая 1" />
+      <input id="mapSearchInput" class="field" minlength="3" maxlength="250" required placeholder="${esc(t("map.searchPlaceholder"))}" />
       <button class="btn btn-outline btn-sm" type="submit">${esc(t("map.searchButton"))}</button></form>
     <div id="mapSearchResults" class="side-stack" aria-live="polite"></div></div>`);
   document.getElementById("mapSearchForm").addEventListener("submit", async e => {
@@ -746,15 +761,60 @@ function useCurrentLocation() {
   );
 }
 
+function openChangePasswordModal() {
+  openModal(`
+    <h3>${esc(t("modal.changePassTitle"))}</h3>
+    <form id="changePassForm">
+      <label for="curPass">${esc(t("modal.currentPassword"))}</label>
+      <input class="field" id="curPass" type="password" required autocomplete="current-password" />
+      <label for="newPass">${esc(t("modal.newPassword"))}</label>
+      <input class="field" id="newPass" type="password" required minlength="8" autocomplete="new-password" />
+      <p class="form-error" id="changePassError"></p>
+      <button class="btn btn-wine" type="submit">${esc(t("modal.save"))}</button>
+    </form>`);
+  document.getElementById("changePassForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorBox = document.getElementById("changePassError");
+    errorBox.textContent = "";
+    try {
+      const res = await api("/auth/change-password", "POST", {
+        current_password: document.getElementById("curPass").value,
+        new_password: document.getElementById("newPass").value,
+      });
+      if (res.access_token) {
+        state.token = res.access_token;
+        localStorage.setItem("qosyu_token", res.access_token);
+      }
+      closeModal();
+      toast(t("toast.passwordChanged"), "success");
+    } catch (err) {
+      errorBox.textContent = err.message;
+    }
+  });
+}
+
 /* ================= Telegram-привязка ================= */
 
-function renderTelegramBlock() {
+async function renderTelegramBlock() {
   const block = document.getElementById("telegramBlock");
   if (!block) return;
+  const sessionId = state.sessionId;
+  if (!state.features) {
+    try { state.features = await api("/auth/features"); }
+    catch (_) { state.features = { telegram_enabled: false, telegram_bot: null }; }
+  }
+  if (sessionId !== state.sessionId) return;
+  if (!state.features.telegram_enabled) {
+    block.classList.add("hidden");
+    block.innerHTML = "";
+    return;
+  }
+  block.classList.remove("hidden");
   if (state.user.telegram_linked) {
     block.innerHTML = `<h3>${esc(t("cab.telegram"))}</h3><p class="status-chip ok" style="font-size:.9rem">${esc(t("cab.telegram.linked"))}</p>`;
     return;
   }
+  const botHandle = `@${state.features.telegram_bot || "QosyuBot"}`;
   block.innerHTML = `
     <h3>${esc(t("cab.telegram"))}</h3>
     <p class="meta" style="margin-bottom:.6rem">${esc(t("cab.telegram.hint"))}</p>
@@ -765,7 +825,7 @@ function renderTelegramBlock() {
       openModal(`
         <h3>${esc(t("modal.tgTitle"))}</h3>
         <div class="policy-text">
-          <p>${esc(t("modal.tgStep1"))} <strong>@QosyuBot</strong></p>
+          <p>${esc(t("modal.tgStep1"))} <strong>${esc(botHandle)}</strong></p>
           <p>${esc(t("modal.tgStep2"))}</p>
           <div class="tg-code">/link ${esc(code)}</div>
           <p class="meta">${esc(t("modal.tgCodeHint"))}</p>
@@ -802,30 +862,61 @@ async function createRequestFromMap() {
 
 async function loadSmeSidebar() {
   try {
+    const kg = esc(t("common.kg"));
     const reqs = await api("/requests/my?limit=8");
     document.getElementById("sideRequestsList").innerHTML = reqs.length
       ? reqs.map((r) => `
           <div class="list-item">
-            <span>${esc(wasteLabel(r.waste_type))} · ${esc(r.weight_kg)} кг${pickupDetails(r)}</span>
+            <span>${esc(wasteLabel(r.waste_type))} · ${esc(r.weight_kg)} ${kg}${pickupDetails(r)}</span>
             <span class="status-chip ${r.status === "collected" || r.status === "verified" ? "ok" : ""}">${esc(statusLabel(r.status))}</span>
           </div>`).join("")
       : `<p class="meta">${esc(t("cab.noRequests"))}</p>`;
     const eng = await api("/analytics/esg/sme");
     document.getElementById("sideEsg").innerHTML = `
-      <div class="list-item"><span>${esc(t("cab.esg.recycled"))}</span><strong>${esc(eng.total_recycled_kg)} кг</strong></div>
-      <div class="list-item"><span>${esc(t("cab.esg.co2"))}<br><small class="meta">${esc(t("co2.formula"))}</small></span><strong>${new Intl.NumberFormat(getLang()).format(eng.co2_saved_kg)} ${esc(t("common.kg"))}</strong></div>
+      <div class="list-item"><span>${esc(t("cab.esg.recycled"))}</span><strong>${esc(eng.total_recycled_kg)} ${kg}</strong></div>
+      <div class="list-item"><span>${esc(t("cab.esg.co2"))}<br><small class="meta">${esc(t("co2.formula"))}</small></span><strong>${new Intl.NumberFormat(getLang()).format(eng.co2_saved_kg)} ${kg}</strong></div>
       <div class="list-item"><span>${esc(t("cab.esg.trees"))}</span><strong>${esc(eng.equivalent_trees)}</strong></div>`;
   } catch (err) { toast(err.message, "error"); }
 }
 
+function openCompleteZoneModal(zoneId, declaredWeight) {
+  openModal(`
+    <h3>${esc(t("modal.completeZoneTitle"))} #${esc(zoneId)}</h3>
+    <form id="completeZoneForm">
+      <label for="actualWeightInput">${esc(t("modal.actualWeightLabel"))}</label>
+      <input class="field" id="actualWeightInput" type="number" min="0.1" max="1000000" step="0.1" placeholder="${esc(declaredWeight)}" />
+      <p class="meta" style="margin-top:.4rem">${esc(t("modal.actualWeightHint"))}</p>
+      <p class="form-error" id="completeZoneError"></p>
+      <button class="btn btn-wine" type="submit">${esc(t("cab.complete"))}</button>
+    </form>`);
+  document.getElementById("completeZoneForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const raw = document.getElementById("actualWeightInput").value.trim();
+    const payload = raw ? { actual_weight_kg: parseFloat(raw) } : null;
+    const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await api(`/recycler/zones/${zoneId}/complete`, "POST", payload);
+      closeModal();
+      toast(t("toast.zoneDone"), "success");
+      clearRoute();
+      await loadRecyclerSidebar();
+      await loadMapData();
+    } catch (err) {
+      document.getElementById("completeZoneError").textContent = err.message;
+    } finally { submitBtn.disabled = false; }
+  });
+}
+
 async function loadRecyclerSidebar() {
   try {
+    const kg = esc(t("common.kg"));
     const open = await api("/clustering/zones/open");
     const openBox = document.getElementById("sideOpenZones");
     openBox.innerHTML = open.length
       ? open.map((z) => `
           <div class="list-item">
-            <span>#${z.id}<br /><span class="meta">${z.request_count} · ${esc(z.total_weight_kg)} кг</span></span>
+            <span>#${z.id}<br /><span class="meta">${z.request_count} · ${esc(z.total_weight_kg)} ${kg}</span></span>
             <span class="zone-buttons">
               <button class="btn btn-outline btn-sm" data-route="${z.id}">${esc(t("cab.route"))}</button>
               <button class="btn btn-wine btn-sm" data-assign="${z.id}">${esc(t("cab.take"))}</button>
@@ -853,25 +944,15 @@ async function loadRecyclerSidebar() {
     myBox.innerHTML = mine.length
       ? mine.map((z) => `
           <div class="list-item">
-            <span>#${z.id}<br /><span class="meta">${z.request_count} · ${esc(z.total_weight_kg)} кг</span></span>
+            <span>#${z.id}<br /><span class="meta">${z.request_count} · ${esc(z.total_weight_kg)} ${kg}</span></span>
             <span style="display:flex;gap:.35rem">
               <button class="btn btn-outline btn-sm" data-route="${z.id}">${esc(t("cab.route"))}</button>
-              <button class="btn btn-wine btn-sm" data-complete="${z.id}">${esc(t("cab.complete"))}</button>
+              <button class="btn btn-wine btn-sm" data-complete="${z.id}" data-weight="${esc(z.total_weight_kg)}">${esc(t("cab.complete"))}</button>
             </span>
           </div>`).join("")
       : `<p class="meta">${esc(t("cab.noMyZones"))}</p>`;
     myBox.querySelectorAll("[data-complete]").forEach((btn) =>
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          await api(`/recycler/zones/${btn.dataset.complete}/complete`, "POST");
-          toast(t("toast.zoneDone"), "success");
-          clearRoute();
-          await loadRecyclerSidebar();
-          await loadMapData();
-        } catch (err) { toast(err.message, "error"); }
-        finally { btn.disabled = false; }
-      })
+      btn.addEventListener("click", () => openCompleteZoneModal(btn.dataset.complete, btn.dataset.weight))
     );
     myBox.querySelectorAll("[data-route]").forEach((btn) =>
       btn.addEventListener("click", () => showZoneRoute(btn.dataset.route))
@@ -917,12 +998,13 @@ async function showZoneRoute(zoneId, startOverride) {
     L.marker([route.start.lat, route.start.lon], {
       icon: L.divIcon({ className: "route-depot", html: "★", iconSize: [26, 26] }),
     }).bindPopup(esc(t("map.start"))).addTo(state.routeLayer);
+    const kg = esc(t("common.kg"));
     // Точки по порядку
     route.stops.forEach((s) => {
       L.marker([s.lat, s.lon], {
         icon: L.divIcon({ className: "route-stop", html: String(s.order), iconSize: [26, 26] }),
       })
-        .bindPopup(`${s.order}. ${esc(s.company || "")}<br>${esc(wasteLabel(s.waste_type))} — ${esc(s.weight_kg)} кг${pickupDetails(s)}`)
+        .bindPopup(`${s.order}. ${esc(s.company || "")}<br>${esc(wasteLabel(s.waste_type))} — ${esc(s.weight_kg)} ${kg}${pickupDetails(s)}`)
         .addTo(state.routeLayer);
     });
     const bounds = L.latLngBounds(route.geometry.length ? route.geometry : route.stops.map((s) => [s.lat, s.lon]));
@@ -940,13 +1022,13 @@ async function showZoneRoute(zoneId, startOverride) {
         <div><span>${esc(t("route.eta"))}</span><b>${esc(route.duration_min)} ${esc(t("common.min"))}</b></div>
         <div><span>${esc(t("route.stops"))}</span><b>${route.stops.length}</b></div>
       </div>
-      <div class="route-load"><span>${esc(t("route.totalWeight"))}</span><strong>${esc(route.total_weight_kg)} кг</strong></div>
+      <div class="route-load"><span>${esc(t("route.totalWeight"))}</span><strong>${esc(route.total_weight_kg)} ${kg}</strong></div>
       ${route.approximate ? `<p class="route-warning">${esc(t("route.approxWarning"))}</p>` : ""}
       ${route.provider_warning ? `<p class="route-warning">${esc(t("route.providerFallback"))}</p>` : ""}
       ${route.order_source === "2gis_matrix" ? `<p class="route-note">${esc(t("public.orderRoad"))}</p>` : route.source === "2gis" && route.order_source === "geographic" ? `<p class="route-warning">${esc(t("public.orderGeo"))}</p>` : ""}
       <p class="route-note">${esc(t("route.limits"))}</p>
       <ol class="route-list">
-        ${route.stops.map((s, i) => `<li><button class="route-stop-button" data-stop="${i}"><span class="route-num">${s.order}</span><span><strong>${esc(s.company || "—")}</strong><br>${esc(wasteLabel(s.waste_type))} · ${esc(s.weight_kg)} кг${pickupDetails(s)}</span></button></li>`).join("")}
+        ${route.stops.map((s, i) => `<li><button class="route-stop-button" data-stop="${i}"><span class="route-num">${s.order}</span><span><strong>${esc(s.company || "—")}</strong><br>${esc(wasteLabel(s.waste_type))} · ${esc(s.weight_kg)} ${kg}${pickupDetails(s)}</span></button></li>`).join("")}
       </ol>
       <p class="meta route-src">${esc(srcLabel)}. ${esc(t(route.source === "2gis" ? "route.timeHint2gis" : "route.timeHint"))}</p>`;
     panel.classList.remove("hidden");
@@ -974,14 +1056,37 @@ async function showZoneRoute(zoneId, startOverride) {
 
 async function loadRequestsHistory() {
   const box = document.getElementById("requestsHistoryList");
+  const title = document.getElementById("requestsHistoryTitle");
+  const kg = esc(t("common.kg"));
   try {
     const sessionId = state.sessionId;
+    if (state.user?.role === "recycler") {
+      if (title) title.textContent = t("cab.completedZones");
+      const zones = await api(`/recycler/zones/completed?limit=50&offset=${state.requestOffset}`);
+      if (sessionId !== state.sessionId) return;
+      box.innerHTML = zones.length
+        ? zones.map((z) => `
+            <div class="list-item">
+              <span><strong>#${esc(z.id)}</strong> · ${esc(z.request_count)} · ${esc(z.total_weight_kg)} ${kg}${z.actual_weight_kg != null ? ` (${esc(t("cab.actualWeight"))}: ${esc(z.actual_weight_kg)} ${kg})` : ""}
+                <br /><span class="meta">${esc((z.completed_at || "").slice(0, 10))} · CO₂: ${new Intl.NumberFormat(getLang()).format(z.co2_saved_kg)} ${kg}</span></span>
+              <span class="status-chip ok">${esc(statusLabel("collected"))}</span>
+            </div>`).join("")
+        : `<p class="meta">${esc(t("cab.noCompletedZones"))}</p>`;
+      box.insertAdjacentHTML("beforeend", `<div class="history-pagination">
+        <button class="btn btn-outline btn-sm" id="requestsPrev" ${state.requestOffset === 0 ? "disabled" : ""}>${esc(t("common.previous"))}</button>
+        <span>${Math.floor(state.requestOffset / 50) + 1}</span>
+        <button class="btn btn-outline btn-sm" id="requestsNext" ${zones.length < 50 ? "disabled" : ""}>${esc(t("common.next"))}</button></div>`);
+      document.getElementById("requestsPrev").onclick = () => { state.requestOffset = Math.max(0, state.requestOffset - 50); loadRequestsHistory(); };
+      document.getElementById("requestsNext").onclick = () => { state.requestOffset += 50; loadRequestsHistory(); };
+      return;
+    }
+    if (title) title.textContent = t("cab.requestsHistory");
     const reqs = await api(`/requests/my?limit=50&offset=${state.requestOffset}`);
     if (sessionId !== state.sessionId) return;
     box.innerHTML = reqs.length
       ? reqs.map((r) => `
           <div class="list-item">
-            <span><strong>${esc(wasteLabel(r.waste_type))}</strong> — ${esc(r.weight_kg)} кг
+            <span><strong>${esc(wasteLabel(r.waste_type))}</strong> — ${esc(r.weight_kg)} ${kg}
               <br /><span class="meta">${esc((r.created_at || "").slice(0, 10))}</span>${pickupDetails(r)}</span>
             <span style="display:flex;gap:.5rem;align-items:center">
               <span class="status-chip ${r.status === "collected" || r.status === "verified" ? "ok" : ""}">${esc(statusLabel(r.status))}</span>
@@ -1051,6 +1156,11 @@ async function loadChatPartners() {
 }
 
 function closeChatSocket() {
+  if (state.chatReconnectTimer) {
+    clearTimeout(state.chatReconnectTimer);
+    state.chatReconnectTimer = null;
+  }
+  state.chatReconnectAttempt = 0;
   if (state.chatWs) {
     state.chatWs.onclose = null;
     state.chatWs.close();
@@ -1069,18 +1179,25 @@ function appendChatBubble(msg, own) {
   box.scrollTop = box.scrollHeight;
 }
 
-async function openChat(partnerId, partnerName) {
-  closeChatSocket();
-  state.chatPartnerId = partnerId;
-  state.chatPartnerName = partnerName;
-  document.getElementById("chatHead").textContent = partnerName;
-  document.getElementById("chatForm").classList.remove("hidden");
-  const box = document.getElementById("chatMessages");
-  box.innerHTML = "";
-  try {
-    const history = await api(`/chat/history/${partnerId}?limit=50`);
-    history.messages.forEach((m) => appendChatBubble(m, m.from === state.user.id));
-  } catch (err) { toast(err.message, "error"); }
+async function openChat(partnerId, partnerName, isReconnect = false) {
+  if (!isReconnect) {
+    closeChatSocket();
+    state.chatPartnerId = partnerId;
+    state.chatPartnerName = partnerName;
+    document.getElementById("chatHead").textContent = partnerName;
+    document.getElementById("chatForm").classList.remove("hidden");
+    const box = document.getElementById("chatMessages");
+    box.innerHTML = "";
+    try {
+      const history = await api(`/chat/history/${partnerId}?limit=50`);
+      if (state.chatPartnerId !== partnerId) return;
+      history.messages.forEach((m) => appendChatBubble(m, m.from === state.user.id));
+    } catch (err) { toast(err.message, "error"); }
+  } else if (state.chatWs) {
+    state.chatWs.onclose = null;
+    state.chatWs.close();
+    state.chatWs = null;
+  }
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   if (state.demo) return;
@@ -1088,12 +1205,13 @@ async function openChat(partnerId, partnerName) {
   try {
     ({ ticket } = await api("/chat/ws-ticket", "POST", { receiver_id: partnerId }));
   } catch (err) {
-    toast(err.message, "error");
+    if (!isReconnect) toast(err.message, "error");
     return;
   }
   if (state.chatPartnerId !== partnerId || !state.token) return;
   const ws = new WebSocket(`${proto}://${location.host}/chat/ws/${partnerId}?ticket=${encodeURIComponent(ticket)}`);
   state.chatWs = ws;
+  ws.onopen = () => { state.chatReconnectAttempt = 0; };
   ws.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
@@ -1106,8 +1224,12 @@ async function openChat(partnerId, partnerName) {
     } catch (_) {}
   };
   ws.onclose = () => {
-    if (state.chatPartnerId === partnerId) {
-      setTimeout(() => { if (state.chatPartnerId === partnerId) openChat(partnerId, partnerName); }, 3000);
+    if (state.chatPartnerId === partnerId && state.chatReconnectAttempt < 5) {
+      const delay = Math.min(3000 * (2 ** state.chatReconnectAttempt), 30000);
+      state.chatReconnectAttempt++;
+      state.chatReconnectTimer = setTimeout(() => {
+        if (state.chatPartnerId === partnerId) openChat(partnerId, partnerName, true);
+      }, delay);
     }
   };
 }
@@ -1125,6 +1247,7 @@ document.getElementById("chatForm").addEventListener("submit", (e) => {
 
 async function loadMarketplace() {
   const box = document.getElementById("marketplaceListings");
+  const kg = esc(t("common.kg"));
   try {
     const listings = await api("/marketplace/listings");
     box.innerHTML = listings.length
@@ -1132,10 +1255,10 @@ async function loadMarketplace() {
           <article class="market-card">
             <div class="head">
               <span class="type">${esc(wasteLabel(l.waste_type))}</span>
-              <span class="price">${esc(l.price_per_kg)} ₸/кг</span>
+              <span class="price">${esc(l.price_per_kg)} ₸/${kg}</span>
             </div>
             <p class="desc">${esc(l.description || t("market.noDesc"))}</p>
-            <p class="meta">${esc(t("market.minLot"))}: ${esc(l.min_kg)} кг${l.available_kg != null ? ` · ${esc(t("market.available"))}: ${esc(l.available_kg)} кг` : ""}</p>
+            <p class="meta">${esc(t("market.minLot"))}: ${esc(l.min_kg)} ${kg}${l.available_kg != null ? ` · ${esc(t("market.available"))}: ${esc(l.available_kg)} ${kg}` : ""}</p>
             ${l.user_id !== state.user.id
               ? `<button class="btn btn-wine btn-sm" data-order="${l.id}" data-min="${esc(l.min_kg)}">${esc(t("market.order"))}</button>`
               : `<p class="meta">${esc(t("market.yourListing"))}</p>`}
@@ -1234,7 +1357,7 @@ async function loadMyOrders() {
           }
           return `
             <div class="list-item">
-              <span><strong>#${o.id}</strong> · ${esc(wasteLabel(o.waste_type))} · ${esc(o.quantity_kg)} кг · ${esc(o.total_price)} ₸
+              <span><strong>#${o.id}</strong> · ${esc(wasteLabel(o.waste_type))} · ${esc(o.quantity_kg)} ${esc(t("common.kg"))} · ${esc(o.total_price)} ₸
                 <br /><span class="meta">${o.is_seller ? esc(t("market.seller")) : esc(t("market.buyer"))} · ${esc((o.created_at || "").slice(0, 10))}</span></span>
               <span style="display:flex;gap:.4rem;align-items:center">
                 <span class="status-chip ${o.status === "completed" ? "ok" : o.status === "cancelled" ? "warn" : ""}">${esc(orderStatusLabel(o.status))}</span>
@@ -1280,8 +1403,8 @@ async function showAiSelection(action) {
     const marker = L.circleMarker(point, { radius: 9, color: "#990011", fillOpacity: .8, bubblingMouseEvents: false });
     const box = document.createElement("div");
     box.textContent = kind === "requests"
-      ? `#${item.id} · ${wasteLabel(item.waste_type)} · ${item.weight_kg} кг · ${statusLabel(item.status)}`
-      : `#${item.id} · ${item.request_count} · ${item.total_weight_kg} кг`;
+      ? `#${item.id} · ${wasteLabel(item.waste_type)} · ${item.weight_kg} ${t("common.kg")} · ${statusLabel(item.status)}`
+      : `#${item.id} · ${item.request_count} · ${item.total_weight_kg} ${t("common.kg")}`;
     if (kind === "zones") {
       const button = document.createElement("button");
       button.className = "btn btn-outline btn-sm";
@@ -1409,7 +1532,7 @@ async function loadAdmin() {
     // Распределение по типам — бары
     const waste = s.waste_distribution.map((w) => ({ label: wasteLabel(w.waste_type), value: w.weight_kg }));
     document.getElementById("adminChartWaste").innerHTML = waste.length
-      ? barChart(waste, "value", "label", " кг")
+      ? barChart(waste, "value", "label", ` ${t("common.kg")}`)
       : `<p class="meta">—</p>`;
 
     const insights = await api("/ai/insights");
@@ -1419,6 +1542,7 @@ async function loadAdmin() {
   } catch (err) { toast(err.message, "error"); }
   loadAdminUsers();
   loadAdminPilots();
+  loadAdminRequests();
 }
 
 function lineChartSVG(series) {
@@ -1493,6 +1617,23 @@ async function loadAdminPilots() {
               ${p.comment ? `<br /><span class="meta pickup-note">${esc(p.comment)}</span>` : ""}</span>
           </div>`).join("")
       : `<p class="meta">${esc(t("admin.noPilots"))}</p>`;
+  } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
+}
+
+async function loadAdminRequests() {
+  const box = document.getElementById("adminRequestsList");
+  if (!box) return;
+  const kg = esc(t("common.kg"));
+  try {
+    const items = await api("/admin/requests?limit=30");
+    box.innerHTML = items.length
+      ? items.map((r) => `
+          <div class="list-item">
+            <span><strong>#${esc(r.id)}</strong> · ${esc(r.company || "—")} · ${esc(wasteLabel(r.waste_type))} · ${esc(r.weight_kg)} ${kg}
+              <br /><span class="meta">${esc((r.created_at || "").slice(0, 10))}</span></span>
+            <span class="status-chip ${r.status === "collected" || r.status === "verified" ? "ok" : ""}">${esc(statusLabel(r.status))}</span>
+          </div>`).join("")
+      : `<p class="meta">${esc(t("admin.noRequests"))}</p>`;
   } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
 }
 

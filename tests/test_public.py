@@ -141,6 +141,20 @@ class PublicTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("tel:", response.text)
             self.assertNotIn("mailto:", response.text)
 
+    async def test_robots_sitemap_and_html_vs_json_404(self):
+        robots = await self.client.get("/robots.txt")
+        self.assertEqual(robots.status_code, 200)
+        self.assertIn("Sitemap: https://qosyu.com/sitemap.xml", robots.text)
+        sitemap = await self.client.get("/sitemap.xml")
+        self.assertEqual(sitemap.status_code, 200)
+        self.assertIn("<loc>https://qosyu.com/</loc>", sitemap.text)
+        html_404 = await self.client.get("/nonexistent-page?lang=en", headers={"Accept": "text/html"})
+        self.assertEqual(html_404.status_code, 404)
+        self.assertIn("Page not found", html_404.text)
+        api_404 = await self.client.get("/public/does-not-exist", headers={"Accept": "text/html"})
+        self.assertEqual(api_404.status_code, 404)
+        self.assertEqual(api_404.headers["content-type"], "application/json")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -155,9 +155,58 @@ def legal(kind: str, lang: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 {metadata(lang, '/' + kind, title + ' — QOSYU')}
 <link rel="icon" type="image/png" href="/static/brand/qosyu-symbol.png" />
-<link rel="stylesheet" href="/static/css/app.css?v=20261121-clean" /></head><body class="legal-page">
+<link rel="stylesheet" href="/static/css/app.css?v=20261121-ready" /></head><body class="legal-page">
 <main class="section"><p><a href="/?lang={lang}">{content['home']}</a> · {languages}</p>
 <article class="card policy-text"><h1>{title}</h1>{paragraphs}
 {contact}</article>
 <p><a href="/privacy?lang={lang}">{content['privacy']}</a> · <a href="/terms?lang={lang}">{content['terms']}</a></p>
 </main></body></html>'''
+
+
+def robots_txt() -> str:
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /auth\n"
+        "Disallow: /chat\n"
+        f"Sitemap: {ORIGIN}/sitemap.xml\n"
+    )
+
+
+def sitemap_xml() -> str:
+    urls = [
+        f"{ORIGIN}/",
+        f"{ORIGIN}/?lang=en",
+        f"{ORIGIN}/?lang=kk",
+        f"{ORIGIN}/privacy",
+        f"{ORIGIN}/terms",
+    ]
+    entries = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</urlset>"
+    )
+
+
+def not_found_page(lang: str = "ru") -> str:
+    lang = locale(lang)
+    titles = {"ru": "Страница не найдена — QOSYU", "en": "Page not found — QOSYU", "kk": "Бет табылмады — QOSYU"}
+    headings = {"ru": "Страница не найдена", "en": "Page not found", "kk": "Бет табылмады"}
+    bodies = {
+        "ru": "Такого адреса на сайте QOSYU нет. Вернитесь на главную страницу.",
+        "en": "This address does not exist on QOSYU. Return to the home page.",
+        "kk": "QOSYU сайтында мұндай мекенжай жоқ. Басты бетке оралыңыз.",
+    }
+    content = COPY[lang]
+    return f'''<!doctype html><html lang="{lang}"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{html.escape(titles[lang])}</title>
+<link rel="icon" type="image/png" href="/static/brand/qosyu-symbol.png" />
+<link rel="stylesheet" href="/static/css/app.css?v=20261121-ready" /></head><body class="legal-page">
+<main class="section"><article class="card policy-text">
+<h1>404 · {html.escape(headings[lang])}</h1>
+<p>{html.escape(bodies[lang])}</p>
+<p><a class="btn btn-wine btn-sm" href="/?lang={lang}">{html.escape(content['home'])}</a></p>
+</article></main></body></html>'''

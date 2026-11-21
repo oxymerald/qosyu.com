@@ -54,6 +54,17 @@ async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
     return Token(access_token=token, expires_in=expires_in, user=UserOut.model_validate(user))
 
 
+@router.get("/features")
+async def auth_features():
+    """Публичные флаги доступных интеграций кабинета (без раскрытия секретов)."""
+    enabled = bool(settings.TELEGRAM_BOT_TOKEN.strip())
+    username = settings.TELEGRAM_BOT_USERNAME.strip().lstrip("@") or "QosyuBot"
+    return {
+        "telegram_enabled": enabled,
+        "telegram_bot": username if enabled else None,
+    }
+
+
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)):
     return current_user

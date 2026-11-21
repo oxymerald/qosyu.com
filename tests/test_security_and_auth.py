@@ -165,6 +165,18 @@ class SecurityAndAuthTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(streamed.status_code, 413)
 
+    async def test_auth_features_reflects_telegram_configuration(self):
+        with patch.object(settings, "TELEGRAM_BOT_TOKEN", ""):
+            resp = await self.client.get("/auth/features")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json(), {"telegram_enabled": False, "telegram_bot": None})
+        with patch.object(settings, "TELEGRAM_BOT_TOKEN", "123456:fake-token"), patch.object(
+            settings, "TELEGRAM_BOT_USERNAME", "@MyQosyuBot"
+        ):
+            resp = await self.client.get("/auth/features")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json(), {"telegram_enabled": True, "telegram_bot": "MyQosyuBot"})
+
 
 if __name__ == "__main__":
     unittest.main()
