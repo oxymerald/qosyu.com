@@ -136,19 +136,6 @@ class CollectionZoneOut(BaseModel):
     optimized_route: Optional[dict] = None
 
 
-# ========== Отзывы ==========
-
-class ReviewCreate(BaseModel):
-    recycler_id: int = Field(..., gt=0)
-    rating: int = Field(..., ge=1, le=5)
-    comment: Optional[str] = Field(None, max_length=2000)
-    zone_id: Optional[int] = Field(None, gt=0)
-
-
-class ReviewRespond(BaseModel):
-    response: str = Field(..., min_length=1, max_length=2000)
-
-
 # ========== Маркетплейс ==========
 
 class ListingCreate(BaseModel):
@@ -182,29 +169,6 @@ class OrderCreate(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: Literal["accepted", "cancelled", "completed"]
-
-
-# ========== Push-уведомления ==========
-
-class PushKeys(BaseModel):
-    p256dh: str = Field(..., min_length=1, max_length=512)
-    auth: str = Field(..., min_length=1, max_length=512)
-
-
-class PushSubscribe(BaseModel):
-    endpoint: str = Field(..., min_length=10, max_length=1000)
-    keys: PushKeys
-
-    @field_validator("endpoint")
-    @classmethod
-    def check_endpoint(cls, v: str) -> str:
-        if not v.startswith("https://"):
-            raise ValueError("endpoint должен быть https URL")
-        return v
-
-
-class PushUnsubscribe(BaseModel):
-    endpoint: str = Field(..., min_length=10, max_length=1000)
 
 
 # ========== Зоны (переработчик) ==========

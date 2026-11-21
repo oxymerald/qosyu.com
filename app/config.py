@@ -45,9 +45,6 @@ class Settings(BaseSettings):
     # --- Пилотная зона (депо переработчика по умолчанию) ---
     DEPOT_LAT: float = 47.1167  # Атырау
     DEPOT_LON: float = 51.8833
-    VAPID_PRIVATE_KEY: str = ""
-    VAPID_PUBLIC_KEY: str = ""
-    VAPID_EMAIL: str = "info@qosyu.kz"
 
     # --- Первичный администратор (создаётся при старте, если задан) ---
     ADMIN_EMAIL: str = ""

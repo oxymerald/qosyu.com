@@ -107,32 +107,6 @@ class ChatMessage(Base):
     from_user = relationship("User", foreign_keys=[from_user_id])
     to_user = relationship("User", foreign_keys=[to_user_id])
 
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    endpoint = Column(String, unique=True, nullable=False, index=True)
-    p256dh = Column(String, nullable=False)
-    auth = Column(String, nullable=False)
-    user_agent = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    last_used = Column(DateTime(timezone=True), onupdate=func.now())
-
-class Review(Base):
-    __tablename__ = "reviews"
-    id = Column(Integer, primary_key=True)
-    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    rating = Column(Integer, nullable=False)
-    comment = Column(Text, nullable=True)
-    images = Column(JSON, default=list)
-    recycler_response = Column(Text, nullable=True)
-    response_at = Column(DateTime(timezone=True), nullable=True)
-    is_verified = Column(Boolean, default=False)
-    zone_id = Column(Integer, ForeignKey("collection_zones.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    helpful_count = Column(Integer, default=0)
-
 class MarketplaceListing(Base):
     __tablename__ = "marketplace_listings"
     id = Column(Integer, primary_key=True)

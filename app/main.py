@@ -24,10 +24,8 @@ from routers import (
     clustering,
     marketplace,
     maps,
-    push,
     recycler,
     requests,
-    reviews,
     telegram_bot,
     public,
 )
@@ -140,8 +138,6 @@ app.include_router(clustering.router, prefix="/clustering", tags=["clustering"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(chat.router)
 app.include_router(marketplace.router)
-app.include_router(reviews.router)
-app.include_router(push.router)
 app.include_router(admin.router)
 app.include_router(ai.router)
 app.include_router(maps.router)

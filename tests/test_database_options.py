@@ -9,6 +9,7 @@ from sqlalchemy import text
 from config import Settings
 from database import engine
 from database_options import database_options
+from models import Base
 
 
 def config(url, **overrides):
@@ -68,7 +69,7 @@ class PrivateSchemaTests(unittest.IsolatedAsyncioTestCase):
                 "JOIN pg_namespace n ON c.relnamespace=n.oid "
                 "WHERE n.nspname=current_schema() AND c.relkind='r'"
             ))).all()
-            self.assertGreaterEqual(len(rows), 9)
+            self.assertGreaterEqual(len(rows), len(Base.metadata.tables))
             self.assertTrue(all(row.relrowsecurity for row in rows))
             self.assertEqual((await conn.execute(text("SELECT ST_X(ST_Point(51.9, 47.1))"))).scalar_one(), 51.9)
             self.assertIsNone((await conn.execute(text("SELECT to_regclass('public.users')"))).scalar_one())
