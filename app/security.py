@@ -115,15 +115,64 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        length = request.headers.get("content-length")
-        if length is not None:
+class PayloadTooLargeError(Exception):
+    """Тело HTTP-запроса превысило MAX_BODY_SIZE при чтении потока."""
+
+
+class BodySizeLimitMiddleware:
+    """Ограничивает размер тела HTTP-запроса по Content-Length и реальному потоку байтов."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers") or [])
+        raw_length = headers.get(b"content-length")
+        if raw_length is not None:
             try:
-                if int(length) > settings.MAX_BODY_SIZE:
-                    return JSONResponse(
-                        status_code=413, content={"detail": "Тело запроса слишком большое"}
-                    )
+                content_length = int(raw_length.decode("latin-1"))
             except ValueError:
-                return JSONResponse(status_code=400, content={"detail": "Некорректный запрос"})
-        return await call_next(request)
+                await JSONResponse(status_code=400, content={"detail": "Некорректный запрос"})(
+                    scope, receive, send
+                )
+                return
+            if content_length < 0:
+                await JSONResponse(status_code=400, content={"detail": "Некорректный запрос"})(
+                    scope, receive, send
+                )
+                return
+            if content_length > settings.MAX_BODY_SIZE:
+                await JSONResponse(
+                    status_code=413, content={"detail": "Тело запроса слишком большое"}
+                )(scope, receive, send)
+                return
+
+        received_bytes = 0
+        response_started = False
+
+        async def limited_receive():
+            nonlocal received_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > settings.MAX_BODY_SIZE:
+                    raise PayloadTooLargeError()
+            return message
+
+        async def tracking_send(message):
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracking_send)
+        except PayloadTooLargeError:
+            if not response_started:
+                await JSONResponse(
+                    status_code=413, content={"detail": "Тело запроса слишком большое"}
+                )(scope, receive, send)

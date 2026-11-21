@@ -50,7 +50,7 @@ async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Неверный email или пароль")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
-    token, expires_in = create_access_token(user.id, user.role.value)
+    token, expires_in = create_access_token(user.id, user.role.value, user.token_version or 0)
     return Token(access_token=token, expires_in=expires_in, user=UserOut.model_validate(user))
 
 
@@ -80,6 +80,15 @@ async def change_password(
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Текущий пароль неверен")
     current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.token_version = (current_user.token_version or 0) + 1
     db.add(current_user)
     await db.commit()
-    return {"message": "Пароль изменён"}
+    token, expires_in = create_access_token(
+        current_user.id, current_user.role.value, current_user.token_version
+    )
+    return {
+        "message": "Пароль изменён",
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+    }

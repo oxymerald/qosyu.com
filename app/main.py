@@ -34,6 +34,7 @@ from routers import (
 from public_pages import frontend, legal
 from security import (
     BodySizeLimitMiddleware,
+    PayloadTooLargeError,
     SecurityHeadersMiddleware,
     rate_limiter,
 )
@@ -117,6 +118,11 @@ if settings.cors_origins:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
+
+
+@app.exception_handler(PayloadTooLargeError)
+async def payload_too_large_handler(request: Request, exc: PayloadTooLargeError):
+    return JSONResponse(status_code=413, content={"detail": "Тело запроса слишком большое"})
 
 
 @app.exception_handler(Exception)

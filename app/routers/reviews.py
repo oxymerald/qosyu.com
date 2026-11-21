@@ -70,7 +70,10 @@ async def create_review(
     return {"id": new_review.id}
 
 
-@router.get("/{recycler_id}")
+@router.get(
+    "/{recycler_id}",
+    dependencies=[Depends(rate_limit("reviews-list", limit=120, window_seconds=60))],
+)
 async def get_reviews(
     recycler_id: int,
     limit: int = Query(50, ge=1, le=100),

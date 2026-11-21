@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+ignore = [
+    "E402",  # conditional/path-adjusted imports in tests
+    "E501",  # long localized UI strings and prompts
+    "E741",  # short variable names like l in comprehensions
+    "B008",  # FastAPI Depends()/Query() defaults
+    "UP017", # timezone.utc compatibility
+]

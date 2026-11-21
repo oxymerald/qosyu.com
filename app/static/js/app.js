@@ -1084,7 +1084,15 @@ async function openChat(partnerId, partnerName) {
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   if (state.demo) return;
-  const ws = new WebSocket(`${proto}://${location.host}/chat/ws/${partnerId}?token=${encodeURIComponent(state.token)}`);
+  let ticket;
+  try {
+    ({ ticket } = await api("/chat/ws-ticket", "POST", { receiver_id: partnerId }));
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  if (state.chatPartnerId !== partnerId || !state.token) return;
+  const ws = new WebSocket(`${proto}://${location.host}/chat/ws/${partnerId}?ticket=${encodeURIComponent(ticket)}`);
   state.chatWs = ws;
   ws.onmessage = (e) => {
     try {
@@ -1410,6 +1418,7 @@ async function loadAdmin() {
       .join("");
   } catch (err) { toast(err.message, "error"); }
   loadAdminUsers();
+  loadAdminPilots();
 }
 
 function lineChartSVG(series) {
@@ -1468,6 +1477,22 @@ async function loadAdminUsers(search = "") {
         } catch (err) { toast(err.message, "error"); }
       })
     );
+  } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
+}
+
+async function loadAdminPilots() {
+  const box = document.getElementById("adminPilotList");
+  if (!box) return;
+  try {
+    const items = await api("/admin/pilot-applications?limit=50");
+    box.innerHTML = items.length
+      ? items.map((p) => `
+          <div class="list-item">
+            <span><strong>${esc(p.company_name)}</strong> <span class="role-chip">${esc((p.language || "ru").toUpperCase())}</span>
+              <br /><span class="meta">${esc(p.contact)} · ${esc((p.created_at || "").slice(0, 10))}</span>
+              ${p.comment ? `<br /><span class="meta pickup-note">${esc(p.comment)}</span>` : ""}</span>
+          </div>`).join("")
+      : `<p class="meta">${esc(t("admin.noPilots"))}</p>`;
   } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
 }
 

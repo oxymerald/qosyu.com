@@ -10,6 +10,7 @@ from dependencies import require_roles
 from models import (
     CollectionZone,
     MarketplaceOrder,
+    PilotApplication,
     RequestStatus,
     User,
     UserRole,
@@ -194,4 +195,29 @@ async def list_requests(
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r, company in result.all()
+    ]
+
+
+@router.get("/pilot-applications", dependencies=[admin_only])
+async def list_pilot_applications(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(PilotApplication)
+        .order_by(PilotApplication.created_at.desc(), PilotApplication.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return [
+        {
+            "id": p.id,
+            "company_name": p.company_name,
+            "contact": p.contact,
+            "comment": p.comment,
+            "language": p.language,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in result.scalars().all()
     ]

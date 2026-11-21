@@ -14,6 +14,6 @@ if __name__ == "__main__":
         proxy_headers=True,
         # Render routes public requests through its ingress proxy.
         forwarded_allow_ips="*" if on_render else "127.0.0.1",
-        # WebSocket URLs currently contain access tokens: do not log query strings.
+        # Do not log query strings (e.g. one-time WebSocket tickets).
         access_log=False,
     )

@@ -38,13 +38,14 @@ def validate_password_strength(password: str) -> str | None:
     return None
 
 
-def create_access_token(user_id: int, role: str) -> tuple[str, int]:
+def create_access_token(user_id: int, role: str, token_version: int = 0) -> tuple[str, int]:
     """Возвращает (токен, срок жизни в секундах)."""
     expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "role": role,
+        "ver": token_version,
         "type": "access",
         "iat": now,
         "exp": now + expires,
