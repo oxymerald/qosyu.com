@@ -64,7 +64,7 @@ PRIVATE_TEXT = re.compile(
 
 
 def redact_private_text(value: str) -> str:
-    for secret in (settings.GEMINI_API_KEY, settings.ANTHROPIC_API_KEY, settings.SECRET_KEY,
+    for secret in (settings.GEMINI_API_KEY, settings.SECRET_KEY,
                    settings.DGIS_API_KEY, settings.TELEGRAM_BOT_TOKEN, settings.ADMIN_PASSWORD):
         if len(secret) >= 8:
             value = value.replace(secret, "[скрыто]")

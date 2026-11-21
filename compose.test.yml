@@ -24,7 +24,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: isolated-local-testing-secret-not-for-production
       OSRM_BASE_URL: ""
-      ANTHROPIC_API_KEY: ""
       GEMINI_API_KEY: ""
       DGIS_API_KEY: ""
       TELEGRAM_BOT_TOKEN: ""
