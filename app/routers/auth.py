@@ -50,8 +50,19 @@ async def login(data: LoginIn, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Неверный email или пароль")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
-    token, expires_in = create_access_token(user.id, user.role.value)
+    token, expires_in = create_access_token(user.id, user.role.value, user.token_version or 0)
     return Token(access_token=token, expires_in=expires_in, user=UserOut.model_validate(user))
+
+
+@router.get("/features")
+async def auth_features():
+    """Публичные флаги доступных интеграций кабинета (без раскрытия секретов)."""
+    enabled = bool(settings.TELEGRAM_BOT_TOKEN.strip())
+    username = settings.TELEGRAM_BOT_USERNAME.strip().lstrip("@") or "QosyuBot"
+    return {
+        "telegram_enabled": enabled,
+        "telegram_bot": username if enabled else None,
+    }
 
 
 @router.get("/me", response_model=UserOut)
@@ -79,7 +90,17 @@ async def change_password(
 ):
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Текущий пароль неверен")
+    user_id = current_user.id
+    user_role = current_user.role.value
+    new_version = (current_user.token_version or 0) + 1
     current_user.hashed_password = get_password_hash(data.new_password)
+    current_user.token_version = new_version
     db.add(current_user)
     await db.commit()
-    return {"message": "Пароль изменён"}
+    token, expires_in = create_access_token(user_id, user_role, new_version)
+    return {
+        "message": "Пароль изменён",
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+    }

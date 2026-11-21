@@ -15,7 +15,7 @@ COPY = {
         "privacy_text": [
             "QOSYU обрабатывает email, название организации и данные учётной записи, а также адреса, координаты, массу, вид сырья и статусы заявок. Пароли хранятся как хэши bcrypt.",
             "Форма пилота доступна без регистрации. Название заведения, контакт и комментарий сохраняются в базе для рассмотрения заявки и обратной связи. Не отправляйте лишние персональные или конфиденциальные сведения.",
-            "При обращении к ИИ-помощнику текст запроса, история диалога и необходимые для ответа данные доступных пользователю заявок передаются внешнему AI-провайдеру Google через Gemini API. Если оператор настроил альтернативного провайдера, обработку выполняет Anthropic API. Пароли и ключи API в диалог не включаются. Не вводите конфиденциальные сведения в чат с ИИ.",
+            "При обращении к ИИ-помощнику текст запроса, история диалога и необходимые для ответа данные доступных пользователю заявок передаются внешнему AI-провайдеру Google через Gemini API. Пароли и ключи API в диалог не включаются. Не вводите конфиденциальные сведения в чат с ИИ.",
             "Для карт, поиска адресов и дорожных маршрутов соответствующие координаты и адресные запросы могут передаваться 2ГИС, OpenStreetMap и OSRM. Фактический провайдер зависит от настроек и доступности сервиса.",
             "В браузере сохраняются выбранный язык и токен входа. Отдельный демо-режим использует вымышленные данные в памяти вкладки и не создаёт реальных заявок на вывоз.",
             "Для запроса об исправлении или удалении данных используйте опубликованный контакт оператора.",
@@ -35,7 +35,7 @@ COPY = {
         "privacy_text": [
             "QOSYU processes email, organisation and account details, plus collection addresses, coordinates, material type, weight and request statuses. Passwords are stored as bcrypt hashes.",
             "The pilot form requires no account. Establishment name, contact and comment are stored in the database to review your enquiry and respond. Do not submit unnecessary personal or confidential information.",
-            "When you use the AI assistant, your request text, conversation history and relevant data from requests you may access are sent to the external AI provider Google through the Gemini API. If an alternative provider is configured, processing uses the Anthropic API. Passwords and API keys are excluded from the conversation. Do not enter confidential information in AI chat.",
+            "When you use the AI assistant, your request text, conversation history and relevant data from requests you may access are sent to the external AI provider Google through the Gemini API. Passwords and API keys are excluded from the conversation. Do not enter confidential information in AI chat.",
             "Coordinates and address searches may be sent to 2GIS, OpenStreetMap and OSRM for maps and road routes. The actual provider depends on configuration and availability.",
             "Your browser stores your language preference and sign-in token. The separate demo uses fictional data in tab memory and does not create real collection requests.",
             "For data correction or deletion, use the published operator contact.",
@@ -55,7 +55,7 @@ COPY = {
         "privacy_text": [
             "QOSYU email, ұйым атауы мен тіркелгі деректерін, сондай-ақ жинау мекенжайларын, координаттарды, шикізат түрін, салмағын және өтінім мәртебесін өңдейді. Құпиясөздер bcrypt хэші түрінде сақталады.",
             "Пилотқа өтінім беру үшін тіркелу қажет емес. Мекеме атауы, байланыс дерегі және түсініктеме өтінімді қарау және кері байланыс үшін дерекқорда сақталады. Артық жеке немесе құпия мәліметтерді жібермеңіз.",
-            "ЖИ көмекшісіне жүгінгенде сұрау мәтіні, диалог тарихы және пайдаланушыға қолжетімді өтінімдердің жауапқа қажетті деректері Gemini API арқылы сыртқы AI-провайдер Google-ға беріледі. Оператор балама провайдерді баптаса, Anthropic API қолданылады. Құпиясөздер мен API кілттері диалогқа қосылмайды. ЖИ чатына құпия мәлімет енгізбеңіз.",
+            "ЖИ көмекшісіне жүгінгенде сұрау мәтіні, диалог тарихы және пайдаланушыға қолжетімді өтінімдердің жауапқа қажетті деректері Gemini API арқылы сыртқы AI-провайдер Google-ға беріледі. Құпиясөздер мен API кілттері диалогқа қосылмайды. ЖИ чатына құпия мәлімет енгізбеңіз.",
             "Карталар мен жол бағыттарын құру үшін координаттар мен мекенжай сұраулары 2ГИС, OpenStreetMap және OSRM сервистеріне берілуі мүмкін. Қолданылатын сервис баптаулар мен қолжетімділікке байланысты.",
             "Браузер таңдалған тілді және кіру токенін сақтайды. Бөлек демо-режим қойынды жадындағы ойдан шығарылған деректерді пайдаланады және нақты тасымалдау өтінімдерін жасамайды.",
             "Деректерді түзету немесе жою үшін оператордың жарияланған байланысын пайдаланыңыз.",
@@ -155,9 +155,58 @@ def legal(kind: str, lang: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 {metadata(lang, '/' + kind, title + ' — QOSYU')}
 <link rel="icon" type="image/png" href="/static/brand/qosyu-symbol.png" />
-<link rel="stylesheet" href="/static/css/app.css?v=20261118-public" /></head><body class="legal-page">
+<link rel="stylesheet" href="/static/css/app.css?v=20261121-ready" /></head><body class="legal-page">
 <main class="section"><p><a href="/?lang={lang}">{content['home']}</a> · {languages}</p>
 <article class="card policy-text"><h1>{title}</h1>{paragraphs}
 {contact}</article>
 <p><a href="/privacy?lang={lang}">{content['privacy']}</a> · <a href="/terms?lang={lang}">{content['terms']}</a></p>
 </main></body></html>'''
+
+
+def robots_txt() -> str:
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /auth\n"
+        "Disallow: /chat\n"
+        f"Sitemap: {ORIGIN}/sitemap.xml\n"
+    )
+
+
+def sitemap_xml() -> str:
+    urls = [
+        f"{ORIGIN}/",
+        f"{ORIGIN}/?lang=en",
+        f"{ORIGIN}/?lang=kk",
+        f"{ORIGIN}/privacy",
+        f"{ORIGIN}/terms",
+    ]
+    entries = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</urlset>"
+    )
+
+
+def not_found_page(lang: str = "ru") -> str:
+    lang = locale(lang)
+    titles = {"ru": "Страница не найдена — QOSYU", "en": "Page not found — QOSYU", "kk": "Бет табылмады — QOSYU"}
+    headings = {"ru": "Страница не найдена", "en": "Page not found", "kk": "Бет табылмады"}
+    bodies = {
+        "ru": "Такого адреса на сайте QOSYU нет. Вернитесь на главную страницу.",
+        "en": "This address does not exist on QOSYU. Return to the home page.",
+        "kk": "QOSYU сайтында мұндай мекенжай жоқ. Басты бетке оралыңыз.",
+    }
+    content = COPY[lang]
+    return f'''<!doctype html><html lang="{lang}"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{html.escape(titles[lang])}</title>
+<link rel="icon" type="image/png" href="/static/brand/qosyu-symbol.png" />
+<link rel="stylesheet" href="/static/css/app.css?v=20261121-ready" /></head><body class="legal-page">
+<main class="section"><article class="card policy-text">
+<h1>404 · {html.escape(headings[lang])}</h1>
+<p>{html.escape(bodies[lang])}</p>
+<p><a class="btn btn-wine btn-sm" href="/?lang={lang}">{html.escape(content['home'])}</a></p>
+</article></main></body></html>'''

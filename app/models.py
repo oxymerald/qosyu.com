@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Boolean, JSON, Text, BigInteger, MetaData
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.sql import func
 import enum
 from config import settings
 
@@ -41,6 +40,7 @@ class User(Base):
     company_name = Column(String)
     role = Column(Enum(UserRole), default=UserRole.SME)
     is_active = Column(Boolean, default=True)
+    token_version = Column(Integer, default=0, server_default="0", nullable=False)
     telegram_chat_id = Column(BigInteger, nullable=True, unique=True)
     rating_avg = Column(Float, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -58,7 +58,7 @@ class PilotApplication(Base):
 class WasteRequest(Base):
     __tablename__ = "waste_requests"
     id = Column(Integer, primary_key=True)
-    sme_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sme_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     waste_type = Column(Enum(WasteType), nullable=False)
     weight_kg = Column(Float, nullable=False)
     latitude = Column(Float, nullable=False)
@@ -66,7 +66,7 @@ class WasteRequest(Base):
     address = Column(String(300), nullable=True)
     pickup_note = Column(String(500), nullable=True)
     location_geom = Column(Geometry('POINT', srid=4326), nullable=False)
-    status = Column(Enum(RequestStatus), default=RequestStatus.PENDING)
+    status = Column(Enum(RequestStatus), default=RequestStatus.PENDING, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class CollectionZone(Base):
@@ -77,8 +77,8 @@ class CollectionZone(Base):
     radius_km = Column(Float)
     total_weight_kg = Column(Float, default=0.0)
     request_ids = Column(JSON)
-    recycler_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    status = Column(Enum(ZoneStatus), default=ZoneStatus.OPEN)
+    recycler_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    status = Column(Enum(ZoneStatus), default=ZoneStatus.OPEN, index=True)
     optimized_route = Column(JSON)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -97,8 +97,8 @@ class CollectionEvent(Base):
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
     id = Column(Integer, primary_key=True, index=True)
-    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     message = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False, server_default='false')
     read_at = Column(DateTime(timezone=True), nullable=True)
@@ -106,32 +106,6 @@ class ChatMessage(Base):
     
     from_user = relationship("User", foreign_keys=[from_user_id])
     to_user = relationship("User", foreign_keys=[to_user_id])
-
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    endpoint = Column(String, unique=True, nullable=False, index=True)
-    p256dh = Column(String, nullable=False)
-    auth = Column(String, nullable=False)
-    user_agent = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    last_used = Column(DateTime(timezone=True), onupdate=func.now())
-
-class Review(Base):
-    __tablename__ = "reviews"
-    id = Column(Integer, primary_key=True)
-    from_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    to_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    rating = Column(Integer, nullable=False)
-    comment = Column(Text, nullable=True)
-    images = Column(JSON, default=list)
-    recycler_response = Column(Text, nullable=True)
-    response_at = Column(DateTime(timezone=True), nullable=True)
-    is_verified = Column(Boolean, default=False)
-    zone_id = Column(Integer, ForeignKey("collection_zones.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    helpful_count = Column(Integer, default=0)
 
 class MarketplaceListing(Base):
     __tablename__ = "marketplace_listings"
@@ -156,8 +130,8 @@ class MarketplaceOrder(Base):
     __tablename__ = "marketplace_orders"
     id = Column(Integer, primary_key=True)
     listing_id = Column(Integer, ForeignKey("marketplace_listings.id"), nullable=False)
-    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    buyer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    seller_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     quantity_kg = Column(Float, nullable=False)
     total_price = Column(Float, nullable=False)
     status = Column(Enum("pending", "accepted", "completed", "cancelled", name="order_status"), default="pending")

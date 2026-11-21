@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import EmailStr, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -35,9 +35,8 @@ class Settings(BaseSettings):
     # свой OSRM-инстанс или OpenRouteService (см. README).
     OSRM_BASE_URL: str = "https://router.project-osrm.org"
     TELEGRAM_BOT_TOKEN: str = ""
-    # --- AI (Claude) ---
-    ANTHROPIC_API_KEY: str = ""
-    AI_MODEL: str = "claude-opus-4-8"
+    TELEGRAM_BOT_USERNAME: str = ""
+    # --- AI (Gemini) ---
     AI_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.5-flash-lite"
@@ -47,9 +46,6 @@ class Settings(BaseSettings):
     # --- Пилотная зона (депо переработчика по умолчанию) ---
     DEPOT_LAT: float = 47.1167  # Атырау
     DEPOT_LON: float = 51.8833
-    VAPID_PRIVATE_KEY: str = ""
-    VAPID_PUBLIC_KEY: str = ""
-    VAPID_EMAIL: str = "info@qosyu.kz"
 
     # --- Первичный администратор (создаётся при старте, если задан) ---
     ADMIN_EMAIL: str = ""
@@ -66,11 +62,12 @@ class Settings(BaseSettings):
     CONTACT_TELEGRAM: str = Field(default="", pattern=r"^(@[A-Za-z0-9_]{5,32})?$")
     CONTACT_WHATSAPP: str = Field(default="", pattern=r"^(\+?[0-9]{7,15})?$")
 
-    class Config:
-        env_file = (Path(__file__).resolve().parents[1] / ".env", ".env")
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=(Path(__file__).resolve().parents[1] / ".env", ".env"),
+        env_file_encoding="utf-8",
         # The shared file also contains Compose variables such as POSTGRES_DB.
-        extra = "ignore"
+        extra="ignore",
+    )
 
     @property
     def is_production(self) -> bool:

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -52,7 +52,10 @@ async def create_listing(
     return {"id": new_listing.id, "message": "Объявление создано"}
 
 
-@router.get("/listings")
+@router.get(
+    "/listings",
+    dependencies=[Depends(rate_limit("marketplace-list", limit=120, window_seconds=60))],
+)
 async def get_listings(
     waste_type: WasteType | None = None,
     min_price: float | None = Query(None, ge=0),
@@ -73,13 +76,21 @@ async def get_listings(
     return [_listing_out(l) for l in result.scalars().all()]
 
 
-@router.get("/listings/{listing_id}")
+@router.get(
+    "/listings/{listing_id}",
+    dependencies=[Depends(rate_limit("marketplace-view", limit=60, window_seconds=60))],
+)
 async def get_listing(listing_id: int, db: AsyncSession = Depends(get_db)):
     listing = await db.get(MarketplaceListing, listing_id)
     if not listing or not listing.is_active:
         raise HTTPException(status_code=404, detail="Объявление не найдено")
-    listing.views = (listing.views or 0) + 1
+    await db.execute(
+        update(MarketplaceListing)
+        .where(MarketplaceListing.id == listing_id)
+        .values(views=func.coalesce(MarketplaceListing.views, 0) + 1)
+    )
     await db.commit()
+    await db.refresh(listing)
     return _listing_out(listing, detailed=True)
 
 

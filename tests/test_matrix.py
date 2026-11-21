@@ -1,4 +1,3 @@
-import copy
 import itertools
 import unittest
 from unittest.mock import AsyncMock, patch

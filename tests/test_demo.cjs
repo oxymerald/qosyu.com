@@ -26,7 +26,11 @@ test("demo lifecycle creates, assigns and completes only fictional data",async()
   assert.equal(filtered.items[0].id,1);
   await api.request("/recycler/zones/1/assign","POST");
   assert.equal((await api.request("/recycler/zones/my")).length,1);
-  await api.request("/recycler/zones/1/complete","POST");
+  await api.request("/recycler/zones/1/complete","POST",{actual_weight_kg:88});
+  const history=await api.request("/recycler/zones/completed");
+  assert.equal(history.length,1);
+  assert.equal(history[0].actual_weight_kg,88);
+  assert.equal((await api.request("/auth/features")).telegram_enabled,false);
   context.state.demo="sme";
   const metrics=await api.request("/analytics/esg/sme");
   assert.equal(metrics.total_recycled_kg,90);

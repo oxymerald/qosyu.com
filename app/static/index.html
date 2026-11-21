@@ -10,7 +10,7 @@
   <link rel="preload" href="/static/fonts/golos-text-variable.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/static/fonts/manrope-variable.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preconnect" href="https://unpkg.com" />
-  <link rel="stylesheet" href="/static/css/app.css?v=20261118-contacts" />
+  <link rel="stylesheet" href="/static/css/app.css?v=20261121-ready" />
 </head>
 <body>
 
@@ -70,7 +70,7 @@
     <p id="demoNotice" class="note-plate hidden" data-i18n="demo.notice"></p>
     <div class="cabinet-tabs" id="cabinetTabs" data-nosnippet>
       <button class="tab-btn tab-active" data-tab="map" data-i18n="tab.map">Карта</button>
-      <button class="tab-btn" data-tab="requests" data-i18n="tab.requests">Мои заявки</button>
+      <button class="tab-btn" data-tab="requests" id="tabRequestsBtn" data-i18n="tab.requests">Мои заявки</button>
       <button class="tab-btn" data-tab="chat">
         <span data-i18n="tab.chat">Чат</span> <span id="chatUnreadBadge" class="badge hidden"></span>
       </button>
@@ -90,7 +90,7 @@
 
     <section class="tab-pane hidden" id="pane-requests" data-nosnippet>
       <div class="pane-narrow">
-        <h2 class="pane-title" data-i18n="cab.requestsHistory">История заявок</h2>
+        <h2 class="pane-title" id="requestsHistoryTitle" data-i18n="cab.requestsHistory">История заявок</h2>
         <div id="requestsHistoryList" class="side-stack"></div>
       </div>
     </section>
@@ -148,6 +148,14 @@
           <input type="text" id="adminUserSearch" class="field" style="max-width:280px" data-i18n-ph="admin.search" />
         </div>
         <div id="adminUsersList" class="side-stack"></div>
+        <div class="pane-head-row" style="margin-top:1.5rem">
+          <h3 class="pane-title" data-i18n="admin.pilotApps">Заявки на пилот</h3>
+        </div>
+        <div id="adminPilotList" class="side-stack"></div>
+        <div class="pane-head-row" style="margin-top:1.5rem">
+          <h3 class="pane-title" data-i18n="admin.recentRequests">Последние заявки</h3>
+        </div>
+        <div id="adminRequestsList" class="side-stack"></div>
       </div>
     </section>
   </main>
@@ -170,9 +178,9 @@
 
   <div id="toastRoot" class="toast-root" aria-live="polite"></div>
 
-  <script src="/static/js/i18n.js?v=20261118-filters"></script>
-  <script src="/static/js/public.js?v=20261118-contacts"></script>
-  <script src="/static/js/demo.js?v=20261118-filters"></script>
-  <script src="/static/js/app.js?v=20261118-filters"></script>
+  <script src="/static/js/i18n.js?v=20261121-ready"></script>
+  <script src="/static/js/public.js?v=20261121-ready"></script>
+  <script src="/static/js/demo.js?v=20261121-ready"></script>
+  <script src="/static/js/app.js?v=20261121-ready"></script>
 </body>
 </html>

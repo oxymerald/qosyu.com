@@ -2,13 +2,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import settings
 from database import get_db
 from dependencies import get_current_user, require_roles
 from models import CollectionZone, RequestStatus, UserRole, WasteRequest, ZoneStatus
 from schemas import CollectionZoneOut
 from security import rate_limit
-from services.geo import create_collection_zones, optimize_route
+from services.geo import compute_route_for_zone, create_collection_zones
 
 router = APIRouter()
 
@@ -40,28 +39,6 @@ async def generate_zones(
     for zone in zones:
         background_tasks.add_task(compute_route_for_zone, zone.id)
     return {"message": f"Создано зон: {len(zones)}", "zone_ids": [z.id for z in zones]}
-
-
-async def compute_route_for_zone(zone_id: int):
-    from database import async_session_maker
-
-    try:
-        async with async_session_maker() as db:
-            result = await db.execute(
-                select(CollectionZone).where(CollectionZone.id == zone_id)
-            )
-            zone = result.scalar_one_or_none()
-            if zone is None:
-                return
-            reqs_result = await db.execute(
-                select(WasteRequest).where(WasteRequest.id.in_(zone.request_ids))
-            )
-            requests = reqs_result.scalars().all()
-            await optimize_route(zone, requests, settings.OSRM_BASE_URL)
-            await db.commit()
-    except Exception:
-        # Маршрут — необязательное улучшение: зона остаётся рабочей и без него
-        pass
 
 
 @router.get("/zones/open", response_model=list[CollectionZoneOut])

@@ -42,3 +42,21 @@ class MigrationTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await transaction.rollback()
         await engine.dispose()
+
+    async def test_users_table_gets_token_version_idempotently(self):
+        schema = "migration_users_" + uuid.uuid4().hex
+        async with engine.connect() as conn:
+            transaction = await conn.begin()
+            try:
+                await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+                await conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                await conn.execute(text("CREATE TABLE waste_requests (id INTEGER PRIMARY KEY, sme_id INTEGER, status TEXT, created_at TIMESTAMPTZ)"))
+                await conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)"))
+                await conn.execute(text("INSERT INTO users VALUES (1, 'old@example.com')"))
+                await upgrade_schema(conn, schema)
+                await upgrade_schema(conn, schema)
+                row = (await conn.execute(text("SELECT id, email, token_version FROM users"))).one()
+                self.assertEqual(tuple(row), (1, "old@example.com", 0))
+            finally:
+                await transaction.rollback()
+        await engine.dispose()

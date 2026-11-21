@@ -1,5 +1,4 @@
 """2GIS contract and fallback tests; all provider responses are synthetic."""
-import copy
 import json
 import unittest
 from unittest.mock import AsyncMock, patch

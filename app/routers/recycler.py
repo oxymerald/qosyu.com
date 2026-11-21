@@ -17,8 +17,8 @@ from models import (
 )
 from schemas import CollectionZoneOut, ZoneComplete
 from services.collection_access import visible_zone_condition, zone_has_request
-from services.esg import CO2E_FORMULA_RU, calculate_co2_saved
-from services.geo import compute_route
+from services.esg import CO2E_FORMULA_RU, calculate_co2_saved, zone_cardboard_weights
+from services.geo import compute_route, compute_route_for_zone
 from security import rate_limit
 
 router = APIRouter()
@@ -83,26 +83,6 @@ async def _notify_zone_smes(zone_request_ids: list[int], text: str):
         await send_notification(chat_id, text)
 
 
-async def _compute_zone_route_task(zone_id: int):
-    """Пересчитывает и сохраняет маршрут зоны (фоновая задача)."""
-    from database import async_session_maker
-    from services.geo import optimize_route
-
-    try:
-        async with async_session_maker() as db:
-            result = await db.execute(select(CollectionZone).where(CollectionZone.id == zone_id))
-            zone = result.scalar_one_or_none()
-            if zone is None:
-                return
-            reqs = await db.execute(
-                select(WasteRequest).where(WasteRequest.id.in_(zone.request_ids or []))
-            )
-            await optimize_route(zone, reqs.scalars().all(), settings.OSRM_BASE_URL)
-            await db.commit()
-    except Exception:
-        pass  # маршрут можно запросить и на лету через GET /zones/{id}/route
-
-
 @router.post("/zones/{zone_id}/assign")
 async def assign_zone(
     zone_id: int,
@@ -128,7 +108,7 @@ async def assign_zone(
         .values(status=RequestStatus.ASSIGNED)
     )
     await db.commit()
-    background_tasks.add_task(_compute_zone_route_task, zone_id)
+    background_tasks.add_task(compute_route_for_zone, zone_id)
     background_tasks.add_task(
         _notify_zone_smes,
         request_ids,
@@ -290,3 +270,57 @@ async def my_zones(
         )
         for z in zones
     ]
+
+
+@router.get("/zones/completed")
+async def completed_zones(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.RECYCLER)),
+):
+    """История завершённых зон текущего переработчика."""
+    zones = (
+        await db.execute(
+            select(CollectionZone)
+            .where(
+                CollectionZone.recycler_id == current_user.id,
+                CollectionZone.status == ZoneStatus.COMPLETED,
+            )
+            .order_by(CollectionZone.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).scalars().all()
+    if not zones:
+        return []
+    zone_ids = [z.id for z in zones]
+    events = (
+        await db.execute(
+            select(CollectionEvent)
+            .where(
+                CollectionEvent.zone_id.in_(zone_ids),
+                CollectionEvent.recycler_id == current_user.id,
+            )
+            .order_by(CollectionEvent.id)
+        )
+    ).scalars().all()
+    by_zone = {ev.zone_id: ev for ev in events}
+    cardboard_by_zone = await zone_cardboard_weights(db, zone_ids)
+    out = []
+    for z in zones:
+        ev = by_zone.get(z.id)
+        cardboard_kg = cardboard_by_zone.get(z.id, 0.0)
+        if ev and ev.actual_weight_kg is not None and cardboard_kg > 0 and cardboard_kg == z.total_weight_kg:
+            cardboard_kg = ev.actual_weight_kg
+        out.append(
+            {
+                "id": z.id,
+                "request_count": len(z.request_ids or []),
+                "total_weight_kg": z.total_weight_kg,
+                "actual_weight_kg": ev.actual_weight_kg if ev else None,
+                "co2_saved_kg": calculate_co2_saved(cardboard_kg),
+                "completed_at": ev.end_time.isoformat() if ev and ev.end_time else None,
+            }
+        )
+    return out

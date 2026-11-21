@@ -47,6 +47,7 @@ const QosyuDemo = (() => {
     const url=new URL(endpoint,"https://demo.invalid"), path=url.pathname;
     const role=state.demo;
     if(method==="GET") {
+      if(path==="/auth/features") return {telegram_enabled:false,telegram_bot:null};
       if(path==="/maps/status") return {provider:"osm"};
       if(path==="/maps/search") return {items:requests.map(r=>({lat:r.latitude,lon:r.longitude,name:r.address}))};
       if(path==="/requests/my") {
@@ -56,6 +57,15 @@ const QosyuDemo = (() => {
       }
       if(path==="/clustering/zones/open") return structuredClone(zones.filter(z=>z.status==="open"));
       if(path==="/recycler/zones/my") return structuredClone(zones.filter(z=>z.recycler_id===-102&&z.status==="assigned"));
+      if(path==="/recycler/zones/completed" && role==="recycler") {
+        return structuredClone(zones.filter(z=>z.recycler_id===-102&&z.status==="completed").map(z => {
+          const weight = z.actual_weight_kg ?? z.total_weight_kg;
+          const cents = weight * CARDBOARD_CO2E_PER_KG * 100;
+          const co2 = Math.round(cents + Number.EPSILON * cents) / 100;
+          return { id: z.id, request_count: z.request_count, total_weight_kg: z.total_weight_kg,
+            actual_weight_kg: z.actual_weight_kg ?? null, co2_saved_kg: co2, completed_at: z.completed_at ?? null };
+        }));
+      }
       if(path==="/recycler/map-requests" && role==="recycler") {
         const params = url.searchParams;
         const minimum = Number(params.get("min_kg") ?? 0);
@@ -120,6 +130,10 @@ const QosyuDemo = (() => {
       const zone=zones.find(z=>z.id===Number(change[1]));
       if(!zone||(change[2]==="assign"?zone.status!=="open":zone.status!=="assigned")) throw new Error(t("demo.unavailable"));
       zone.status=change[2]==="assign"?"assigned":"completed";zone.recycler_id=-102;
+      if(change[2]==="complete") {
+        zone.actual_weight_kg = body?.actual_weight_kg ?? null;
+        zone.completed_at = new Date().toISOString();
+      }
       requests.filter(r=>zone.request_ids.includes(r.id)).forEach(r=>r.status=change[2]==="assign"?"assigned":"collected");
       return {message:"OK"};
     }
