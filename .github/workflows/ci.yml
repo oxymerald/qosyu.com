@@ -21,7 +21,16 @@ jobs:
         run: ruff check --output-format=github app tests
       - name: Run Python unit tests
         working-directory: app
-        run: python -m unittest discover -s ../tests -p "test_*.py" -v
+        run: |
+          python - <<'PY'
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("../tests", pattern="test_*.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          for test, tb in result.failures + result.errors:
+              last = [line.strip() for line in tb.strip().splitlines() if line.strip()][-1]
+              print(f"::error title={test}::{last}")
+          sys.exit(0 if result.wasSuccessful() else 1)
+          PY
 
   frontend-checks:
     runs-on: ubuntu-latest
@@ -71,7 +80,16 @@ jobs:
       - name: Install SQLite test driver inside backend container
         run: docker compose -p qosyu-ci -f compose.test.yml exec -T backend python -m pip install --user --no-cache-dir aiosqlite==0.21.0
       - name: Run full integration test suite
-        run: docker compose -p qosyu-ci -f compose.test.yml exec -T backend python -m unittest discover -s /tests -v
+        run: |
+          docker compose -p qosyu-ci -f compose.test.yml exec -T backend python - <<'PY'
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("/tests", pattern="test_*.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          for test, tb in result.failures + result.errors:
+              last = [line.strip() for line in tb.strip().splitlines() if line.strip()][-1]
+              print(f"::error title={test}::{last}")
+          sys.exit(0 if result.wasSuccessful() else 1)
+          PY
       - name: Tear down test stack
         if: always()
         run: docker compose -p qosyu-ci -f compose.test.yml down -v

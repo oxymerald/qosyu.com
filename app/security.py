@@ -3,7 +3,7 @@
 import time
 
 from fastapi import HTTPException, Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 
 from config import settings
@@ -87,7 +87,7 @@ def rate_limit(scope: str, limit: int, window_seconds: int):
     return dependency
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+class SecurityHeadersMiddleware:
     CSP = (
         "default-src 'self'; "
         "script-src 'self' https://unpkg.com; "
@@ -101,18 +101,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         "form-action 'self'"
     )
 
-    async def dispatch(self, request, call_next):
-        response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), payment=()")
-        response.headers.setdefault("Content-Security-Policy", self.CSP)
-        if settings.is_production:
-            response.headers.setdefault(
-                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
-            )
-        return response
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.setdefault("X-Content-Type-Options", "nosniff")
+                headers.setdefault("X-Frame-Options", "DENY")
+                headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+                headers.setdefault("Permissions-Policy", "camera=(), microphone=(), payment=()")
+                headers.setdefault("Content-Security-Policy", self.CSP)
+                if settings.is_production:
+                    headers.setdefault(
+                        "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+                    )
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 class PayloadTooLargeError(Exception):
