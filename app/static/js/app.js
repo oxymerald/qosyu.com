@@ -1089,8 +1089,11 @@ async function openChat(partnerId, partnerName) {
   ws.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
-      if (data.type === "message") appendChatBubble(data, Boolean(data.own));
-      else if (data.type === "error") toast(data.detail, "error");
+      if (data.type === "message" && (data.own || data.from === state.chatPartnerId)) {
+        appendChatBubble(data, Boolean(data.own));
+      } else if (data.type === "error") {
+        toast(data.detail, "error");
+      }
       refreshUnreadBadge();
     } catch (_) {}
   };
@@ -1468,29 +1471,6 @@ async function loadAdminUsers(search = "") {
   } catch (err) { box.innerHTML = `<p class="meta">${esc(err.message)}</p>`; }
 }
 
-/* ================= Scroll-анимации ================= */
-
-function initReveal() {
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const items = document.querySelectorAll(".reveal");
-  if (reduce || !("IntersectionObserver" in window)) {
-    items.forEach((el) => el.classList.add("revealed"));
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("revealed");
-          io.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.12 }
-  );
-  items.forEach((el) => io.observe(el));
-}
-
 /* ================= Старт ================= */
 
 (async function init() {
@@ -1498,7 +1478,6 @@ function initReveal() {
   markActiveLang();
   renderHeader();
   updateRoleTabs();
-  initReveal();
   if (state.token) {
     try {
       state.user = await api("/auth/me");

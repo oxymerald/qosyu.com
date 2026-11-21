@@ -104,7 +104,7 @@ docker compose -p qosyu-tests -f compose.test.yml exec -T backend python -m unit
 docker compose -p qosyu-tests -f compose.test.yml down
 ```
 
-Для сценариев, изменяющих данные, используется отдельная тестовая БД. Подробности — в [заметках по запуску](docs/OPERATIONS.md).
+Для сценариев, изменяющих данные, используется отдельная тестовая БД (`compose.test.yml`, `QOSYU_ISOLATED_TEST=1`). Подробности по облачному запуску и ключам — в [DEPLOY.md](DEPLOY.md).
 
 ## Что пока не решено
 
@@ -119,14 +119,10 @@ docker compose -p qosyu-tests -f compose.test.yml down
 ## Документация
 
 - [ROADMAP.md](ROADMAP.md) — этапы работы и результаты проверок.
-- [DEPLOY.md](DEPLOY.md) — развёртывание на Render и Supabase.
-- [docs/OPERATIONS.md](docs/OPERATIONS.md) — ключи, резервные копии, лимиты и важные замечания по эксплуатации.
+- [DEPLOY.md](DEPLOY.md) — развёртывание на Render и Supabase, резервное копирование и ограничения.
 - [`.env.example`](.env.example) — доступные переменные окружения.
 
-## Команда
+## Авторство
 
-- Ахметжанов Айсултан — CEO
-- Галымжанулы Бекарыс — CTO
-- Жалел Данияр — CTO
-
-*QOSYU team*
+- Автор платформы и алгоритмической модели: Ахметжанов Айсултан.
+- Помощь в тестировании интерфейса и обсуждении на этапе хакатона: Галымжанулы Бекарыс, Жалел Данияр.

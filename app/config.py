@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import EmailStr, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -66,11 +66,12 @@ class Settings(BaseSettings):
     CONTACT_TELEGRAM: str = Field(default="", pattern=r"^(@[A-Za-z0-9_]{5,32})?$")
     CONTACT_WHATSAPP: str = Field(default="", pattern=r"^(\+?[0-9]{7,15})?$")
 
-    class Config:
-        env_file = (Path(__file__).resolve().parents[1] / ".env", ".env")
-        env_file_encoding = "utf-8"
+    model_config = SettingsConfigDict(
+        env_file=(Path(__file__).resolve().parents[1] / ".env", ".env"),
+        env_file_encoding="utf-8",
         # The shared file also contains Compose variables such as POSTGRES_DB.
-        extra = "ignore"
+        extra="ignore",
+    )
 
     @property
     def is_production(self) -> bool:

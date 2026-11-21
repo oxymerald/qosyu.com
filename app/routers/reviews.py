@@ -5,7 +5,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from dependencies import get_current_user, require_roles
+from dependencies import require_roles
 from models import CollectionZone, Review, User, UserRole, WasteRequest, ZoneStatus
 from schemas import ReviewCreate, ReviewRespond
 from security import rate_limit

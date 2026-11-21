@@ -1,8 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Boolean, JSON, Text, BigInteger, MetaData
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.sql import func
 import enum
 from config import settings
 

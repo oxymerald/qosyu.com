@@ -123,9 +123,11 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(User).order_by(User.created_at.desc())
-    if search:
-        pattern = f"%{search.strip()}%"
-        query = query.where(User.email.ilike(pattern) | User.company_name.ilike(pattern))
+    if search and (needle := search.strip()):
+        query = query.where(
+            User.email.icontains(needle, autoescape=True)
+            | User.company_name.icontains(needle, autoescape=True)
+        )
     result = await db.execute(query.limit(limit).offset(offset))
     return [
         {
@@ -146,7 +148,7 @@ class UserModeration(BaseModel):
     is_active: bool
 
 
-@router.patch("/users/{user_id}", dependencies=[])
+@router.patch("/users/{user_id}")
 async def moderate_user(
     user_id: int,
     data: UserModeration,

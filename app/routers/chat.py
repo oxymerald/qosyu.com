@@ -101,7 +101,7 @@ async def websocket_chat(websocket: WebSocket, receiver_id: int, token: str = Qu
             await manager.send_message(receiver_id, payload)
             await websocket.send_json({**payload, "own": True})
     except WebSocketDisconnect:
-        manager.disconnect(user.id)
+        manager.disconnect(user.id, websocket)
 
 
 @router.get("/history/{user_id}")

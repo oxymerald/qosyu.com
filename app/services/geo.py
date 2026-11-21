@@ -7,14 +7,18 @@
    по реальным дорогам.
 """
 
+import logging
 import math
 
 import httpx
 import numpy as np
 from sklearn.cluster import DBSCAN
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import CollectionZone, WasteRequest, ZoneStatus
+
+logger = logging.getLogger("qosyu.geo")
 
 EARTH_RADIUS_KM = 6371.0
 CITY_SPEED_KMH = 32.0  # средняя скорость грузовика в городе
@@ -275,3 +279,27 @@ async def optimize_route(
     route["request_order"] = [requests[i].id for i in route["waypoint_order"]]
     zone.optimized_route = route
     return zone
+
+
+async def compute_route_for_zone(zone_id: int) -> None:
+    """Фоново пересчитывает и сохраняет маршрут зоны без расхода квоты 2ГИС."""
+    from config import settings
+    from database import async_session_maker
+
+    try:
+        async with async_session_maker() as db:
+            zone = (
+                await db.execute(select(CollectionZone).where(CollectionZone.id == zone_id))
+            ).scalar_one_or_none()
+            if zone is None:
+                return
+            reqs = (
+                await db.execute(
+                    select(WasteRequest).where(WasteRequest.id.in_(zone.request_ids or []))
+                )
+            ).scalars().all()
+            await optimize_route(zone, reqs, settings.OSRM_BASE_URL)
+            await db.commit()
+    except Exception:
+        # Маршрут можно построить и на лету через GET /recycler/zones/{id}/route.
+        logger.warning("Фоновый расчёт маршрута для зоны #%s не удался", zone_id, exc_info=True)

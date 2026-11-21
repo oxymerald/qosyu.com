@@ -155,7 +155,7 @@ def legal(kind: str, lang: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 {metadata(lang, '/' + kind, title + ' — QOSYU')}
 <link rel="icon" type="image/png" href="/static/brand/qosyu-symbol.png" />
-<link rel="stylesheet" href="/static/css/app.css?v=20261118-public" /></head><body class="legal-page">
+<link rel="stylesheet" href="/static/css/app.css?v=20261121-clean" /></head><body class="legal-page">
 <main class="section"><p><a href="/?lang={lang}">{content['home']}</a> · {languages}</p>
 <article class="card policy-text"><h1>{title}</h1>{paragraphs}
 {contact}</article>

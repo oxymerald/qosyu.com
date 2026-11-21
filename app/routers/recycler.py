@@ -18,7 +18,7 @@ from models import (
 from schemas import CollectionZoneOut, ZoneComplete
 from services.collection_access import visible_zone_condition, zone_has_request
 from services.esg import CO2E_FORMULA_RU, calculate_co2_saved
-from services.geo import compute_route
+from services.geo import compute_route, compute_route_for_zone
 from security import rate_limit
 
 router = APIRouter()
@@ -83,26 +83,6 @@ async def _notify_zone_smes(zone_request_ids: list[int], text: str):
         await send_notification(chat_id, text)
 
 
-async def _compute_zone_route_task(zone_id: int):
-    """Пересчитывает и сохраняет маршрут зоны (фоновая задача)."""
-    from database import async_session_maker
-    from services.geo import optimize_route
-
-    try:
-        async with async_session_maker() as db:
-            result = await db.execute(select(CollectionZone).where(CollectionZone.id == zone_id))
-            zone = result.scalar_one_or_none()
-            if zone is None:
-                return
-            reqs = await db.execute(
-                select(WasteRequest).where(WasteRequest.id.in_(zone.request_ids or []))
-            )
-            await optimize_route(zone, reqs.scalars().all(), settings.OSRM_BASE_URL)
-            await db.commit()
-    except Exception:
-        pass  # маршрут можно запросить и на лету через GET /zones/{id}/route
-
-
 @router.post("/zones/{zone_id}/assign")
 async def assign_zone(
     zone_id: int,
@@ -128,7 +108,7 @@ async def assign_zone(
         .values(status=RequestStatus.ASSIGNED)
     )
     await db.commit()
-    background_tasks.add_task(_compute_zone_route_task, zone_id)
+    background_tasks.add_task(compute_route_for_zone, zone_id)
     background_tasks.add_task(
         _notify_zone_smes,
         request_ids,
