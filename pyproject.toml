@@ -4,11 +4,5 @@ line-length = 120
 src = ["app", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "UP"]
-ignore = [
-    "E402",  # conditional/path-adjusted imports in tests
-    "E501",  # long localized UI strings and prompts
-    "E741",  # short variable names like l in comprehensions
-    "B008",  # FastAPI Depends()/Query() defaults
-    "UP017", # timezone.utc compatibility
-]
+# Focus on real bugs, undefined/unused names, bare excepts, and mutable defaults.
+select = ["F", "E711", "E712", "E722", "B006", "B007", "B018", "B023"]

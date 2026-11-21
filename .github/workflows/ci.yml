@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements-test.txt ruff
       - name: Lint Python with ruff
-        run: ruff check app tests
+        run: ruff check --output-format=github app tests
       - name: Run Python unit tests
         working-directory: app
         run: python -m unittest discover -s ../tests -p "test_*.py" -v
@@ -68,6 +68,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start isolated PostGIS + Redis test stack
         run: docker compose -p qosyu-ci -f compose.test.yml up -d --build --wait
+      - name: Install SQLite test driver inside backend container
+        run: docker compose -p qosyu-ci -f compose.test.yml exec -T backend python -m pip install --user --no-cache-dir aiosqlite==0.21.0
       - name: Run full integration test suite
         run: docker compose -p qosyu-ci -f compose.test.yml exec -T backend python -m unittest discover -s /tests -v
       - name: Tear down test stack
