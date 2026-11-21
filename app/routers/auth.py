@@ -79,13 +79,14 @@ async def change_password(
 ):
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=403, detail="Текущий пароль неверен")
+    user_id = current_user.id
+    user_role = current_user.role.value
+    new_version = (current_user.token_version or 0) + 1
     current_user.hashed_password = get_password_hash(data.new_password)
-    current_user.token_version = (current_user.token_version or 0) + 1
+    current_user.token_version = new_version
     db.add(current_user)
     await db.commit()
-    token, expires_in = create_access_token(
-        current_user.id, current_user.role.value, current_user.token_version
-    )
+    token, expires_in = create_access_token(user_id, user_role, new_version)
     return {
         "message": "Пароль изменён",
         "access_token": token,

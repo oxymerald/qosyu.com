@@ -163,19 +163,23 @@ class BodySizeLimitMiddleware:
                 return
 
         received_bytes = 0
+        exceeded = False
         response_started = False
 
         async def limited_receive():
-            nonlocal received_bytes
+            nonlocal received_bytes, exceeded
             message = await receive()
             if message["type"] == "http.request":
                 received_bytes += len(message.get("body", b""))
                 if received_bytes > settings.MAX_BODY_SIZE:
+                    exceeded = True
                     raise PayloadTooLargeError()
             return message
 
         async def tracking_send(message):
             nonlocal response_started
+            if exceeded:
+                return
             if message["type"] == "http.response.start":
                 response_started = True
             await send(message)
@@ -183,7 +187,9 @@ class BodySizeLimitMiddleware:
         try:
             await self.app(scope, limited_receive, tracking_send)
         except PayloadTooLargeError:
-            if not response_started:
-                await JSONResponse(
-                    status_code=413, content={"detail": "Тело запроса слишком большое"}
-                )(scope, receive, send)
+            exceeded = True
+
+        if exceeded and not response_started:
+            await JSONResponse(
+                status_code=413, content={"detail": "Тело запроса слишком большое"}
+            )(scope, receive, send)

@@ -23,7 +23,7 @@ class AdminAndMarketplaceTests(unittest.IsolatedAsyncioTestCase):
                 await conn.run_sync(model.__table__.create)
 
         async def isolated_db():
-            async with AsyncSession(self.engine) as db:
+            async with AsyncSession(self.engine, expire_on_commit=False) as db:
                 yield db
 
         app.dependency_overrides[get_db] = isolated_db
